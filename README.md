@@ -9,3 +9,10 @@ wget -O add-swap.sh https://raw.githubusercontent.com/woodchen-ink/useful-linux-
 chmod +x add-swap.sh
 sudo ./add-swap.sh
 ```
+
+- [enable_bbr.sh](./enable_bbr.sh) 一键启用 BBR TCP 拥塞控制算法
+  - 脚本功能：检查内核版本并启用 BBR TCP 拥塞控制算法以提升网络性能
+  - 脚本使用：
+```bash
+bash <(curl -s https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/enable_bbr.sh)
+```

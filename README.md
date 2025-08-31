@@ -16,3 +16,21 @@ sudo ./add-swap.sh
 ```bash
 bash <(curl -s https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/enable_bbr.sh)
 ```
+
+- [setup_ufw.sh](./setup_ufw.sh) UFW防火墙一键配置脚本
+  - 脚本功能：自动检测并安装UFW防火墙，配置默认端口(22,80,443)，支持自定义端口，启用防火墙并设置开机自启
+  - 脚本使用：
+```bash
+wget -O setup_ufw.sh https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/setup_ufw.sh
+chmod +x setup_ufw.sh
+sudo ./setup_ufw.sh
+```
+
+- [setup_fail2ban.sh](./setup_fail2ban.sh) Fail2ban一键安装配置脚本
+  - 脚本功能：自动检测并安装Fail2ban，配置SSH永久封禁模式(bantime = -1)，集成UFW防火墙
+  - 脚本使用：
+```bash
+wget -O setup_fail2ban.sh https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/setup_fail2ban.sh
+chmod +x setup_fail2ban.sh
+sudo ./setup_fail2ban.sh
+```

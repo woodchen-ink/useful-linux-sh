@@ -1,36 +1,82 @@
-# 常用linux脚本
+# 常用Linux脚本集合
 
-## 脚本列表
-- [add-swap.sh](./sh/add-swap.sh) 一键添加 swap 空间 (交互式版本，先显示当前 swap)
-  - 脚本功能：一键添加 swap 空间 (交互式版本，先显示当前 swap)
-  - 脚本使用：
+这是一个常用Linux系统管理脚本的集合，包含了系统优化、安全配置、网络设置等实用工具。
+
+## 🚀 快速开始
+
+### 一键管理工具 (推荐)
+
+使用 `uls.sh` 统一管理脚本，提供交互式菜单，无需记忆复杂命令：
+
 ```bash
-wget -O add-swap.sh https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/sh/add-swap.sh
+# 下载并运行ULS工具箱
+curl -fsSL https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/uls.sh -o uls.sh
+chmod +x uls.sh
+sudo ./uls.sh
+```
+
+**ULS工具箱功能：**
+- 🎯 交互式菜单，操作简单直观
+- 📥 按需下载脚本，首次使用时自动获取
+- 🔄 一键更新ULS管理脚本到最新版本
+- 💾 智能缓存，重复使用无需重新下载
+- 🗑️ 完整卸载功能，干净移除所有文件
+- ⚡ 可选安装到系统路径，全局使用
+
+---
+
+## 📜 独立脚本使用
+
+### 🖥️ 系统优化脚本
+
+#### 🔄 Swap空间管理脚本
+一键添加swap空间的交互式脚本，会先显示当前swap状态，支持自定义swap大小。
+
+```bash
+wget -O add-swap.sh https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/scripts/system/add-swap.sh
 chmod +x add-swap.sh
 sudo ./add-swap.sh
 ```
 
-- [enable_bbr.sh](./enable_bbr.sh) 一键启用 BBR TCP 拥塞控制算法
-  - 脚本功能：检查内核版本并启用 BBR TCP 拥塞控制算法以提升网络性能
-  - 脚本使用：
+#### 🚀 BBR TCP优化脚本
+检查内核版本并启用BBR TCP拥塞控制算法，显著提升网络传输性能。
+
 ```bash
-bash <(curl -s https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/enable_bbr.sh)
+bash <(curl -s https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/scripts/system/enable_bbr.sh)
 ```
 
-- [setup_ufw.sh](./setup_ufw.sh) UFW防火墙一键配置脚本
-  - 脚本功能：自动检测并安装UFW防火墙，配置默认端口(22,80,443)，支持自定义端口，启用防火墙并设置开机自启
-  - 脚本使用：
+### 🔒 安全防护脚本
+
+#### 🛡️ UFW防火墙配置脚本
+自动检测并安装UFW防火墙，配置常用端口(22,80,443)，支持自定义端口设置，启用防火墙并设置开机自启。
+
 ```bash
-wget -O setup_ufw.sh https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/setup_ufw.sh
+wget -O setup_ufw.sh https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/scripts/security/setup_ufw.sh
 chmod +x setup_ufw.sh
 sudo ./setup_ufw.sh
 ```
 
-- [setup_fail2ban.sh](./setup_fail2ban.sh) Fail2ban一键安装配置脚本
-  - 脚本功能：自动检测并安装Fail2ban，配置SSH永久封禁模式(bantime = -1)，集成UFW防火墙
-  - 脚本使用：
+#### 🚫 Fail2ban入侵防护脚本
+自动安装配置Fail2ban入侵检测系统，配置SSH永久封禁模式，与UFW防火墙深度集成。
+
 ```bash
-wget -O setup_fail2ban.sh https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/setup_fail2ban.sh
+wget -O setup_fail2ban.sh https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/scripts/security/setup_fail2ban.sh
 chmod +x setup_fail2ban.sh
 sudo ./setup_fail2ban.sh
+```
+
+### 🌐 网络配置脚本
+
+#### 🌐 DNS配置锁定脚本
+设置DNS为8.8.8.8和1.1.1.1，通过多种机制防止DNS配置被篡改。支持systemd-resolved和传统resolv.conf两种模式，包含自动恢复和定时检查功能。
+
+```bash
+wget -O setup_dns.sh https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/scripts/network/setup_dns.sh
+chmod +x setup_dns.sh
+sudo ./setup_dns.sh
+```
+
+卸载DNS锁定：
+```bash
+sudo ./setup_dns.sh --uninstall
 ```

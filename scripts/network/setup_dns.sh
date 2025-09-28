@@ -204,18 +204,18 @@ check_dns() {
         chattr -i /etc/resolv.conf 2>/dev/null
 
         # 恢复配置
-        cat > /etc/resolv.conf << EOF
+        cat > /etc/resolv.conf << DNSEOF
 # DNS配置 - 由setup_dns.sh脚本生成
 # 请勿手动修改此文件
-nameserver $PRIMARY_DNS
-nameserver $SECONDARY_DNS
+nameserver \$PRIMARY_DNS
+nameserver \$SECONDARY_DNS
 
 # 选项配置
 options timeout:2
 options attempts:3
 options rotate
 options single-request-reopen
-EOF
+DNSEOF
 
         # 重新锁定
         chattr +i /etc/resolv.conf 2>/dev/null

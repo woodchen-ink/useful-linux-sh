@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # ULS - Useful Linux Scripts 统一管理脚本
-# 版本: 1.0
+# 版本: 1.1
 # 作者: woodchen-ink
 
 # 配置信息
-SCRIPT_VERSION="1.0"
+SCRIPT_VERSION="1.1"
 SCRIPT_NAME="uls.sh"
 SCRIPT_URL="https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main"
 INSTALL_DIR="/usr/local/bin"
@@ -72,38 +72,36 @@ download_script() {
     fi
 }
 
-# 执行脚本函数
+# 执行脚本函数 - 每次都重新下载最新版本
 run_script() {
     local script_name="$1"
     local local_path="$CONFIG_DIR/scripts/$script_name"
 
-    # 检查脚本是否存在，不存在则下载
-    if [ ! -f "$local_path" ]; then
-        log_info "正在下载 $script_name..."
-        case $script_name in
-            "add-swap.sh")
-                download_script "$script_name" "scripts/system/add-swap.sh" || return 1
-                ;;
-            "enable_bbr.sh")
-                download_script "$script_name" "scripts/system/enable_bbr.sh" || return 1
-                ;;
-            "setup_ufw.sh")
-                download_script "$script_name" "scripts/security/setup_ufw.sh" || return 1
-                ;;
-            "setup_fail2ban.sh")
-                download_script "$script_name" "scripts/security/setup_fail2ban.sh" || return 1
-                ;;
-            "setup_dns.sh")
-                download_script "$script_name" "scripts/network/setup_dns.sh" || return 1
-                ;;
-            *)
-                log_error "未知脚本: $script_name"
-                return 1
-                ;;
-        esac
-    else
-        log_info "使用缓存的 $script_name"
-    fi
+    # 每次都重新下载最新版本
+    log_info "正在下载最新版本的 $script_name..."
+    rm -f "$local_path"  # 删除旧版本
+
+    case $script_name in
+        "add-swap.sh")
+            download_script "$script_name" "scripts/system/add-swap.sh" || return 1
+            ;;
+        "enable_bbr.sh")
+            download_script "$script_name" "scripts/system/enable_bbr.sh" || return 1
+            ;;
+        "setup_ufw.sh")
+            download_script "$script_name" "scripts/security/setup_ufw.sh" || return 1
+            ;;
+        "setup_fail2ban.sh")
+            download_script "$script_name" "scripts/security/setup_fail2ban.sh" || return 1
+            ;;
+        "setup_dns.sh")
+            download_script "$script_name" "scripts/network/setup_dns.sh" || return 1
+            ;;
+        *)
+            log_error "未知脚本: $script_name"
+            return 1
+            ;;
+    esac
 
     # 执行脚本
     log_info "正在执行 $script_name..."
@@ -157,21 +155,67 @@ clean_cache() {
     fi
 }
 
+# 获取GitHub最新Release版本
+get_latest_release() {
+    local api_url="https://api.github.com/repos/woodchen-ink/useful-linux-sh/releases/latest"
+    local latest_version
+
+    # 尝试从GitHub API获取最新版本
+    if command -v jq >/dev/null 2>&1; then
+        latest_version=$(curl -s "$api_url" | jq -r '.tag_name' 2>/dev/null)
+    else
+        # 如果没有jq，使用grep解析
+        latest_version=$(curl -s "$api_url" | grep '"tag_name":' | head -n1 | cut -d'"' -f4)
+    fi
+
+    # 如果API失败，回退到直接检查脚本文件
+    if [ -z "$latest_version" ] || [ "$latest_version" = "null" ]; then
+        log_warn "无法从GitHub API获取版本信息，检查脚本文件..."
+        local temp_file="/tmp/uls_check.sh"
+        if curl -fsSL "$SCRIPT_URL/uls.sh" -o "$temp_file" 2>/dev/null; then
+            latest_version=$(grep 'SCRIPT_VERSION=' "$temp_file" | head -n1 | cut -d'"' -f2)
+            rm -f "$temp_file"
+        fi
+    fi
+
+    echo "$latest_version"
+}
+
 # 更新ULS脚本
 update_uls() {
     log_info "正在检查ULS脚本更新..."
 
+    local latest_version=$(get_latest_release)
     local temp_file="/tmp/uls_new.sh"
 
-    if curl -fsSL "$SCRIPT_URL/uls.sh" -o "$temp_file"; then
-        if [ -f "$temp_file" ]; then
-            # 检查新版本
-            local new_version=$(grep 'SCRIPT_VERSION=' "$temp_file" | cut -d'"' -f2)
+    if [ -z "$latest_version" ]; then
+        log_error "无法获取最新版本信息"
+        return 1
+    fi
 
-            if [ "$new_version" != "$SCRIPT_VERSION" ]; then
-                log_info "发现新版本: $new_version (当前: $SCRIPT_VERSION)"
+    log_info "当前版本: $SCRIPT_VERSION"
+    log_info "最新版本: $latest_version"
 
+    if [ "$latest_version" != "$SCRIPT_VERSION" ]; then
+        log_info "发现新版本，正在下载..."
+
+        # 从GitHub Release下载，如果失败则从主分支下载
+        local download_success=false
+        local release_url="https://github.com/woodchen-ink/useful-linux-sh/releases/download/$latest_version/uls.sh"
+
+        if curl -fsSL "$release_url" -o "$temp_file" 2>/dev/null; then
+            download_success=true
+            log_info "从Release下载成功"
+        elif curl -fsSL "$SCRIPT_URL/uls.sh" -o "$temp_file" 2>/dev/null; then
+            download_success=true
+            log_info "从主分支下载成功"
+        fi
+
+        if [ "$download_success" = true ] && [ -f "$temp_file" ]; then
+            # 验证下载的文件
+            if bash -n "$temp_file" 2>/dev/null; then
                 # 备份当前版本
+                mkdir -p "$CONFIG_DIR/backup"
                 cp "$0" "$CONFIG_DIR/backup/uls_${SCRIPT_VERSION}_$(date +%Y%m%d_%H%M%S).sh"
 
                 # 更新脚本
@@ -186,21 +230,21 @@ update_uls() {
 
                 rm -f "$temp_file"
 
-                log_success "ULS脚本已更新到版本 $new_version"
-                log_info "建议清理缓存以确保使用最新脚本"
-                clean_cache
+                log_success "ULS脚本已更新到版本 $latest_version"
                 log_info "重新启动脚本中..."
                 exec "$0"
             else
-                log_info "当前已是最新版本: $SCRIPT_VERSION"
+                log_error "下载的文件语法检查失败"
+                rm -f "$temp_file"
+                return 1
             fi
+        else
+            log_error "下载更新文件失败"
+            return 1
         fi
     else
-        log_error "无法下载更新文件"
-        return 1
+        log_info "当前已是最新版本"
     fi
-
-    rm -f "$temp_file"
 }
 
 # 安装ULS到系统

@@ -1,0 +1,107 @@
+name: Test Scripts
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  syntax-check:
+    runs-on: ubuntu-latest
+    name: Syntax Check
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Check ULS script syntax
+      run: |
+        echo "🔍 检查ULS主脚本语法..."
+        bash -n uls.sh
+        echo "✅ uls.sh 语法检查通过"
+
+    - name: Check all scripts syntax
+      run: |
+        echo "🔍 检查所有功能脚本语法..."
+        for script in scripts/*/*.sh; do
+          if [ -f "$script" ]; then
+            echo "检查: $script"
+            bash -n "$script"
+            echo "✅ $script 语法检查通过"
+          fi
+        done
+        echo "🎉 所有脚本语法检查完成"
+
+    - name: Check for common issues
+      run: |
+        echo "🔍 检查常见问题..."
+
+        # 检查是否有嵌套的EOF标记
+        echo "检查嵌套EOF标记..."
+        if grep -r "EOF.*EOF" scripts/; then
+          echo "❌ 发现嵌套的EOF标记"
+          exit 1
+        fi
+        echo "✅ 没有嵌套EOF标记问题"
+
+        # 检查脚本权限标记
+        echo "检查脚本shebang..."
+        for script in uls.sh scripts/*/*.sh; do
+          if [ -f "$script" ] && ! head -n1 "$script" | grep -q "^#!/bin/bash"; then
+            echo "❌ $script 缺少正确的shebang"
+            exit 1
+          fi
+        done
+        echo "✅ 所有脚本都有正确的shebang"
+
+  functionality-test:
+    runs-on: ubuntu-latest
+    name: Basic Functionality Test
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Test ULS help and version
+      run: |
+        echo "🔍 测试ULS基本功能..."
+
+        # 测试版本显示
+        bash uls.sh --version
+
+        # 测试帮助信息
+        bash uls.sh --help
+
+        # 测试信息显示
+        bash uls.sh --info
+
+        echo "✅ ULS基本功能测试通过"
+
+    - name: Test script download URLs
+      run: |
+        echo "🔍 测试脚本下载URL..."
+
+        # 测试主要脚本文件是否可访问
+        scripts=(
+          "scripts/system/add-swap.sh"
+          "scripts/system/enable_bbr.sh"
+          "scripts/security/setup_ufw.sh"
+          "scripts/security/setup_fail2ban.sh"
+          "scripts/network/setup_dns.sh"
+        )
+
+        base_url="https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main"
+
+        for script in "${scripts[@]}"; do
+          url="$base_url/$script"
+          echo "检查: $url"
+          if curl -f -s -I "$url" > /dev/null; then
+            echo "✅ $script 可访问"
+          else
+            echo "❌ $script 无法访问"
+            exit 1
+          fi
+        done
+
+        echo "🎉 所有脚本URL测试通过"

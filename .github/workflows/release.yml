@@ -1,0 +1,107 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # 触发条件：推送以 v 开头的标签 (如 v1.1, v1.2.0)
+
+permissions:
+  contents: write  # 允许创建 release 和上传文件
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Validate scripts syntax
+      run: |
+        echo "🔍 检查所有脚本语法..."
+        bash -n uls.sh
+        bash -n scripts/*/*.sh
+        echo "✅ 所有脚本语法检查通过"
+
+    - name: Extract version from tag
+      id: version
+      run: |
+        # 从tag中提取版本号 (去掉 v 前缀)
+        VERSION=${GITHUB_REF#refs/tags/v}
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "📦 Release version: $VERSION"
+
+    - name: Update version in uls.sh
+      run: |
+        # 更新uls.sh中的版本号
+        sed -i 's/SCRIPT_VERSION="[^"]*"/SCRIPT_VERSION="${{ steps.version.outputs.version }}"/' uls.sh
+        sed -i 's/# 版本: [0-9.]*/# 版本: ${{ steps.version.outputs.version }}/' uls.sh
+        echo "✅ 已更新uls.sh版本号为 ${{ steps.version.outputs.version }}"
+
+    - name: Verify version update
+      run: |
+        echo "🔍 验证版本更新..."
+        grep "SCRIPT_VERSION=" uls.sh
+        grep "# 版本:" uls.sh
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: ULS v${{ steps.version.outputs.version }}
+        body: |
+          ## ULS (Useful Linux Scripts) v${{ steps.version.outputs.version }}
+
+          ### 🚀 快速使用
+          ```bash
+          curl -fsSL https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/uls.sh -o uls.sh
+          chmod +x uls.sh
+          sudo ./uls.sh
+          ```
+
+          ### 📋 功能特性
+          - 🔄 Swap空间管理 - 一键添加swap空间
+          - 🚀 BBR TCP优化 - 启用BBR拥塞控制算法
+          - 🛡️ UFW防火墙配置 - 配置UFW防火墙规则
+          - 🚫 Fail2ban防护 - 安装配置入侵防护
+          - 🌐 DNS配置锁定 - 设置并锁定DNS服务器
+
+          ### ✨ 更新内容
+          - 每次执行都下载最新脚本版本
+          - 基于GitHub Release的自动版本管理
+          - 改进的错误处理和用户体验
+
+          ### 📥 下载文件
+          - `uls.sh` - ULS主管理脚本
+
+          完整文档请查看: https://github.com/woodchen-ink/useful-linux-sh
+        draft: false
+        prerelease: false
+
+    - name: Upload ULS Script
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./uls.sh
+        asset_name: uls.sh
+        asset_content_type: application/x-sh
+
+    - name: Commit version update
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add uls.sh
+        git commit -m "chore: update version to ${{ steps.version.outputs.version }}" || exit 0
+        git push origin HEAD:main || echo "⚠️ 推送失败，可能是权限问题"
+
+    - name: Release Summary
+      run: |
+        echo "🎉 Release创建完成!"
+        echo "📦 版本: v${{ steps.version.outputs.version }}"
+        echo "🔗 Release URL: ${{ steps.create_release.outputs.html_url }}"
+        echo "📁 下载地址: ${{ steps.create_release.outputs.upload_url }}"

@@ -467,17 +467,13 @@ cleanup() {
         if [[ $delete_remote =~ ^[Yy]$ ]]; then
             log_info "正在删除远程备份..."
             if [ "$USE_PASSWORD" = true ]; then
-                if sshpass -p "$TARGET_PASSWORD" ssh -T $SSH_OPTIONS ${TARGET_USER}@${TARGET_HOST} "rm -rf $REMOTE_BACKUP_DIR" 2>/dev/null; then
-                    log_success "远程备份已删除"
-                else
-                    log_error "删除远程备份失败"
-                fi
+                sshpass -p "$TARGET_PASSWORD" ssh -T $SSH_OPTIONS ${TARGET_USER}@${TARGET_HOST} "rm -rf $REMOTE_BACKUP_DIR" && \
+                    log_success "远程备份已删除" || log_error "删除远程备份失败"
             else
-                if ssh -T $SSH_OPTIONS ${TARGET_USER}@${TARGET_HOST} "rm -rf $REMOTE_BACKUP_DIR" 2>/dev/null; then
-                    log_success "远程备份已删除"
-                else
-                    log_error "删除远程备份失败"
-                fi
+                # 使用密钥认证时，明确指定所有SSH选项
+                ssh -T -i "$SSH_KEY_FILE" -p "$TARGET_PORT" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+                    ${TARGET_USER}@${TARGET_HOST} "rm -rf $REMOTE_BACKUP_DIR" && \
+                    log_success "远程备份已删除" || log_error "删除远程备份失败"
             fi
         else
             log_info "远程备份保存在: ${TARGET_USER}@${TARGET_HOST}:${REMOTE_BACKUP_DIR}"
@@ -511,6 +507,15 @@ main() {
     REMOTE_BACKUP_DIR=""
     USE_TEMP_KEY=false
     SSH_KEY_FILE=""
+
+    # SSH连接相关变量（需要在cleanup中使用）
+    TARGET_HOST=""
+    TARGET_USER=""
+    TARGET_PORT=""
+    TARGET_PASSWORD=""
+    SSH_OPTIONS=""
+    SCP_OPTIONS=""
+    USE_PASSWORD=false
 
     # 检查环境
     check_root

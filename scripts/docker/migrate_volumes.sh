@@ -444,12 +444,6 @@ RESTORE_SCRIPT_EOF
 cleanup() {
     log_info "清理临时文件..."
 
-    # 清理临时私钥文件
-    if [ "$USE_TEMP_KEY" = true ] && [ -n "$SSH_KEY_FILE" ] && [ -f "$SSH_KEY_FILE" ]; then
-        rm -f "$SSH_KEY_FILE"
-        log_info "临时私钥文件已删除"
-    fi
-
     # 清理本地备份
     if [ -n "$BACKUP_DIR" ] && [ -d "$BACKUP_DIR" ]; then
         read -p "是否删除本地备份文件? [y/N]: " delete_local
@@ -461,7 +455,7 @@ cleanup() {
         fi
     fi
 
-    # 清理远程备份
+    # 清理远程备份（必须在删除私钥之前，因为需要用私钥连接远程服务器）
     if [ -n "$REMOTE_BACKUP_DIR" ]; then
         read -p "是否删除目标服务器上的备份文件? [y/N]: " delete_remote
         if [[ $delete_remote =~ ^[Yy]$ ]]; then
@@ -487,6 +481,12 @@ cleanup() {
             echo $STOPPED_CONTAINERS | xargs -r docker start
             log_success "容器已重启"
         fi
+    fi
+
+    # 最后清理临时私钥文件（必须放在最后，因为前面的远程操作可能需要使用它）
+    if [ "$USE_TEMP_KEY" = true ] && [ -n "$SSH_KEY_FILE" ] && [ -f "$SSH_KEY_FILE" ]; then
+        rm -f "$SSH_KEY_FILE"
+        log_info "临时私钥文件已删除"
     fi
 }
 

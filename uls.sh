@@ -97,6 +97,9 @@ run_script() {
         "setup_dns.sh")
             download_script "$script_name" "scripts/network/setup_dns.sh" || return 1
             ;;
+        "migrate_volumes.sh")
+            download_script "$script_name" "scripts/docker/migrate_volumes.sh" || return 1
+            ;;
         *)
             log_error "未知脚本: $script_name"
             return 1
@@ -124,9 +127,10 @@ show_menu() {
     echo -e "${WHITE}  ${BLUE}3.${NC} ${GREEN}🛡️  UFW防火墙配置${NC}   - 配置UFW防火墙规则"
     echo -e "${WHITE}  ${BLUE}4.${NC} ${GREEN}🚫 Fail2ban防护${NC}     - 安装配置入侵防护"
     echo -e "${WHITE}  ${BLUE}5.${NC} ${GREEN}🌐 DNS配置锁定${NC}      - 设置并锁定DNS服务器"
+    echo -e "${WHITE}  ${BLUE}6.${NC} ${GREEN}🐳 Docker Volumes迁移${NC} - 跨服务器迁移Docker卷"
     echo
-    echo -e "${WHITE}  ${PURPLE}6.${NC} ${CYAN}🔄 更新ULS脚本${NC}      - 更新本管理脚本"
-    echo -e "${WHITE}  ${PURPLE}7.${NC} ${CYAN}🗑️  卸载ULS脚本${NC}      - 卸载并清理所有文件"
+    echo -e "${WHITE}  ${PURPLE}7.${NC} ${CYAN}🔄 更新ULS脚本${NC}      - 更新本管理脚本"
+    echo -e "${WHITE}  ${PURPLE}8.${NC} ${CYAN}🗑️  卸载ULS脚本${NC}      - 卸载并清理所有文件"
     echo
     echo -e "${WHITE}  ${RED}0.${NC} ${RED}❌ 退出程序${NC}"
     echo
@@ -316,7 +320,7 @@ main_loop() {
     while true; do
         show_menu
 
-        read -p "请输入选项 (0-7): " choice
+        read -p "请输入选项 (0-8): " choice
 
         case $choice in
             1)
@@ -341,9 +345,13 @@ main_loop() {
                 ;;
             6)
                 echo
-                update_uls
+                run_script "migrate_volumes.sh"
                 ;;
             7)
+                echo
+                update_uls
+                ;;
+            8)
                 echo
                 uninstall_uls
                 ;;

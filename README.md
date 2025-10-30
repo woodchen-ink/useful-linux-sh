@@ -80,3 +80,28 @@ sudo ./setup_dns.sh
 ```bash
 sudo ./setup_dns.sh --uninstall
 ```
+
+### 🐳 Docker管理脚本
+
+#### 🐳 Docker Volumes迁移脚本
+将Docker volumes从一台服务器迁移到另一台服务器的完整解决方案。支持SSH密钥认证和密码认证,提供批量迁移和选择性迁移功能。
+
+```bash
+wget -O migrate_volumes.sh https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/scripts/docker/migrate_volumes.sh
+chmod +x migrate_volumes.sh
+sudo ./migrate_volumes.sh
+```
+
+**功能特性：**
+- ✅ 支持单个或批量迁移Docker volumes
+- 🔐 支持SSH密钥认证（推荐）和密码认证
+- 📦 自动压缩备份,节省传输时间
+- 🔄 智能容器管理,自动处理正在使用的volume
+- 🛡️ 完整的错误处理和连接测试
+- 🧹 迁移完成后可选清理临时文件
+- 📊 详细的迁移进度和状态反馈
+
+**使用场景：**
+- 服务器迁移时转移Docker数据
+- Docker数据备份到远程服务器
+- 多环境之间同步Docker volumes

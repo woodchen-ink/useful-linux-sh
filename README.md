@@ -154,3 +154,32 @@ journalctl -u V2bX -f     # 查看实时日志
 - 需要配合修改版 V2board 使用
 - 建议在干净的系统上安装
 - 安装前请确保服务器时间正确
+
+### 📊 服务器性能测试脚本
+
+#### 📊 服务器性能测试工具
+集成多个主流服务器性能测试工具,提供综合性能评估和网络质量测试。
+
+```bash
+wget -O server_benchmark.sh https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/scripts/benchmark/server_benchmark.sh
+chmod +x server_benchmark.sh
+sudo ./server_benchmark.sh
+```
+
+**可用测试工具:**
+
+1. **NodeQuality测试**
+   - 节点质量综合测试
+   - 测试网络质量、延迟等指标
+   - 适合测试服务器网络性能
+
+2. **VPS融合怪服务器测评**
+   - CPU、内存、磁盘、网络全方位测试
+   - 综合性服务器性能评估
+   - 适合VPS/云服务器全面测试
+
+**功能特性:**
+- 🎯 交互式菜单选择测试工具
+- 🔄 自动调用最新上游测试脚本
+- 📊 详细的性能测试报告
+- 🧹 自动清理临时文件

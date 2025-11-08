@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # ULS - Useful Linux Scripts 统一管理脚本
-# 版本: 1.2
+# 版本: 1.3
 # 作者: woodchen-ink
 
 # 配置信息
-SCRIPT_VERSION="1.2"
+SCRIPT_VERSION="1.3"
 SCRIPT_NAME="uls.sh"
 SCRIPT_URL="https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main"
 INSTALL_DIR="/usr/local/bin"
@@ -103,6 +103,9 @@ run_script() {
         "setup_v2bx.sh")
             download_script "$script_name" "scripts/proxy/setup_v2bx.sh" || return 1
             ;;
+        "server_benchmark.sh")
+            download_script "$script_name" "scripts/benchmark/server_benchmark.sh" || return 1
+            ;;
         *)
             log_error "未知脚本: $script_name"
             return 1
@@ -135,9 +138,10 @@ show_menu() {
     echo -e "${WHITE}  ${BLUE}5.${NC} ${GREEN}🌐 DNS配置锁定${NC}      - 设置并锁定DNS服务器"
     echo -e "${WHITE}  ${BLUE}6.${NC} ${GREEN}🐳 Docker Volumes迁移${NC} - 跨服务器迁移Docker卷"
     echo -e "${WHITE}  ${BLUE}7.${NC} ${GREEN}🚄 V2bX节点管理${NC}     - V2board节点服务端管理"
+    echo -e "${WHITE}  ${BLUE}8.${NC} ${GREEN}📊 服务器性能测试${NC}   - 综合性能和网络测试"
     echo
-    echo -e "${WHITE}  ${PURPLE}8.${NC} ${CYAN}🔄 更新ULS脚本${NC}      - 更新本管理脚本"
-    echo -e "${WHITE}  ${PURPLE}9.${NC} ${CYAN}🗑️  卸载ULS脚本${NC}      - 卸载并清理所有文件"
+    echo -e "${WHITE}  ${PURPLE}9.${NC} ${CYAN}🔄 更新ULS脚本${NC}      - 更新本管理脚本"
+    echo -e "${WHITE}  ${PURPLE}10.${NC} ${CYAN}🗑️  卸载ULS脚本${NC}     - 卸载并清理所有文件"
     echo
     echo -e "${WHITE}  ${RED}0.${NC} ${RED}❌ 退出程序${NC}"
     echo
@@ -327,7 +331,7 @@ main_loop() {
     while true; do
         show_menu
 
-        read -p "请输入选项 (0-9): " choice
+        read -p "请输入选项 (0-10): " choice
 
         case $choice in
             1)
@@ -360,9 +364,13 @@ main_loop() {
                 ;;
             8)
                 echo
-                update_uls
+                run_script "server_benchmark.sh"
                 ;;
             9)
+                echo
+                update_uls
+                ;;
+            10)
                 echo
                 uninstall_uls
                 ;;

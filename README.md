@@ -10,11 +10,14 @@
 
 #### 一键安装运行 (推荐)
 
+**使用短链接**
 ```bash
-# 使用短链接
 curl -fsSL https://l.czl.net/q/uls -o uls.sh && chmod +x uls.sh && sudo ./uls.sh
+```
 
-# 或使用完整链接
+
+**或使用完整链接**
+```bash
 curl -fsSL https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/uls.sh -o uls.sh && chmod +x uls.sh && sudo ./uls.sh
 ```
 

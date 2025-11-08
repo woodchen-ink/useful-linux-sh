@@ -8,11 +8,26 @@
 
 使用 `uls.sh` 统一管理脚本，提供交互式菜单，无需记忆复杂命令：
 
+#### 方式一: 一键安装运行 (推荐)
+
+使用短链接:
 ```bash
-# 下载并运行ULS工具箱
-curl -fsSL https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/uls.sh -o uls.sh
-chmod +x uls.sh
-sudo ./uls.sh
+curl -fsSL https://l.czl.net/q/uls | sudo bash
+```
+
+或使用完整链接:
+```bash
+curl -fsSL https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/uls.sh | sudo bash
+```
+
+#### 方式二: 下载后运行
+
+```bash
+# 使用短链接
+curl -fsSL https://l.czl.net/q/uls -o uls.sh && chmod +x uls.sh && sudo ./uls.sh
+
+# 或使用完整链接
+curl -fsSL https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/uls.sh -o uls.sh && chmod +x uls.sh && sudo ./uls.sh
 ```
 
 **ULS工具箱功能：**
@@ -105,3 +120,43 @@ sudo ./migrate_volumes.sh
 - 服务器迁移时转移Docker数据
 - Docker数据备份到远程服务器
 - 多环境之间同步Docker volumes
+
+### 🚄 代理节点管理脚本
+
+#### 🚄 V2bX节点管理脚本
+一键安装和管理V2bX (V2board节点服务端),自动调用上游官方脚本,确保功能始终保持最新。
+
+```bash
+wget -O setup_v2bx.sh https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/scripts/proxy/setup_v2bx.sh
+chmod +x setup_v2bx.sh
+sudo ./setup_v2bx.sh
+```
+
+**关于 V2bX:**
+- 基于多核心的 V2board 节点服务端
+- 支持协议: Vmess/Vless, Trojan, Shadowsocks, Hysteria
+- 支持自动申请和续签 TLS 证书
+- 支持多节点管理和跨节点 IP 限制
+- 项目地址: https://github.com/wyx2685/V2bX
+
+**功能特性:**
+- 🔄 自动同步上游官方脚本最新功能
+- 📦 自动安装所有必要依赖
+- 🛠️ 完整的服务管理命令提示
+- 📝 详细的配置文档链接
+
+**常用管理命令:**
+```bash
+systemctl start V2bX      # 启动服务
+systemctl stop V2bX       # 停止服务
+systemctl restart V2bX    # 重启服务
+systemctl status V2bX     # 查看状态
+journalctl -u V2bX -f     # 查看实时日志
+```
+
+**配置文件位置:** `/etc/V2bX/config.yml`
+
+**注意事项:**
+- 需要配合修改版 V2board 使用
+- 建议在干净的系统上安装
+- 安装前请确保服务器时间正确

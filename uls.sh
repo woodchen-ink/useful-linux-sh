@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # ULS - Useful Linux Scripts 统一管理脚本
-# 版本: 1.3
+# 版本: 1.4
 # 作者: woodchen-ink
 
 # 配置信息
-SCRIPT_VERSION="1.3"
+SCRIPT_VERSION="1.4"
 SCRIPT_NAME="uls.sh"
 SCRIPT_URL="https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main"
 INSTALL_DIR="/usr/local/bin"
@@ -19,6 +19,7 @@ BLUE='\033[0;34m'
 PURPLE='\033[0;35m'
 CYAN='\033[0;36m'
 WHITE='\033[1;37m'
+BOLD='\033[1m'
 NC='\033[0m'
 
 # 日志函数
@@ -106,6 +107,9 @@ run_script() {
         "server_benchmark.sh")
             download_script "$script_name" "scripts/benchmark/server_benchmark.sh" || return 1
             ;;
+        "security_monitor.sh")
+            download_script "$script_name" "scripts/security/security_monitor.sh" || return 1
+            ;;
         *)
             log_error "未知脚本: $script_name"
             return 1
@@ -135,17 +139,59 @@ show_menu() {
     echo -e "${WHITE}  ${BLUE}2.${NC} ${GREEN}🚀 BBR TCP优化${NC}      - 启用BBR拥塞控制算法"
     echo -e "${WHITE}  ${BLUE}3.${NC} ${GREEN}🛡️  UFW防火墙配置${NC}   - 配置UFW防火墙规则"
     echo -e "${WHITE}  ${BLUE}4.${NC} ${GREEN}🚫 Fail2ban防护${NC}     - 安装配置入侵防护"
-    echo -e "${WHITE}  ${BLUE}5.${NC} ${GREEN}🌐 DNS配置锁定${NC}      - 设置并锁定DNS服务器"
-    echo -e "${WHITE}  ${BLUE}6.${NC} ${GREEN}🐳 Docker Volumes迁移${NC} - 跨服务器迁移Docker卷"
-    echo -e "${WHITE}  ${BLUE}7.${NC} ${GREEN}🚄 V2bX节点管理${NC}     - V2board节点服务端管理"
-    echo -e "${WHITE}  ${BLUE}8.${NC} ${GREEN}📊 服务器性能测试${NC}   - 综合性能和网络测试"
+    echo -e "${WHITE}  ${BLUE}5.${NC} ${GREEN}🔍 安全监控管理${NC}     - UFW和Fail2ban监控管理"
+    echo -e "${WHITE}  ${BLUE}6.${NC} ${GREEN}🌐 DNS配置锁定${NC}      - 设置并锁定DNS服务器"
+    echo -e "${WHITE}  ${BLUE}7.${NC} ${GREEN}🐳 Docker Volumes迁移${NC} - 跨服务器迁移Docker卷"
+    echo -e "${WHITE}  ${BLUE}8.${NC} ${GREEN}🚄 V2bX节点管理${NC}     - V2board节点服务端管理"
+    echo -e "${WHITE}  ${BLUE}9.${NC} ${GREEN}📊 服务器性能测试${NC}   - 综合性能和网络测试"
     echo
-    echo -e "${WHITE}  ${PURPLE}9.${NC} ${CYAN}🔄 更新ULS脚本${NC}      - 更新本管理脚本"
-    echo -e "${WHITE}  ${PURPLE}10.${NC} ${CYAN}🗑️  卸载ULS脚本${NC}     - 卸载并清理所有文件"
+    echo -e "${WHITE}  ${PURPLE}10.${NC} ${CYAN}🔄 更新ULS脚本${NC}      - 更新本管理脚本"
+    echo -e "${WHITE}  ${PURPLE}11.${NC} ${CYAN}🗑️  卸载ULS脚本${NC}     - 卸载并清理所有文件"
     echo
     echo -e "${WHITE}  ${RED}0.${NC} ${RED}❌ 退出程序${NC}"
     echo
     echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
+}
+
+# 版本比对函数 - 支持语义化版本
+# 返回: 0 表示 $1 < $2, 1 表示 $1 >= $2
+version_lt() {
+    local ver1=$1
+    local ver2=$2
+
+    # 移除可能的 'v' 前缀
+    ver1=${ver1#v}
+    ver2=${ver2#v}
+
+    # 使用sort -V进行版本比对
+    if [ "$ver1" = "$ver2" ]; then
+        return 1  # 版本相同
+    fi
+
+    # sort -V 会按语义化版本排序,第一个就是较小的版本
+    local sorted_first=$(printf '%s\n%s' "$ver1" "$ver2" | sort -V | head -n1)
+
+    if [ "$sorted_first" = "$ver1" ]; then
+        return 0  # ver1 < ver2
+    else
+        return 1  # ver1 >= ver2
+    fi
+}
+
+# 清理旧备份文件 - 保留最近3个版本
+clean_old_backups() {
+    if [ -d "$CONFIG_DIR/backup" ]; then
+        local backup_count=$(ls -1 "$CONFIG_DIR/backup"/uls_*.sh 2>/dev/null | wc -l)
+
+        if [ $backup_count -gt 3 ]; then
+            log_info "清理旧备份文件 (保留最近3个版本)..."
+            # 按时间排序,删除最旧的备份文件
+            ls -t "$CONFIG_DIR/backup"/uls_*.sh 2>/dev/null | tail -n +4 | while read -r old_backup; do
+                rm -f "$old_backup"
+                log_info "已删除旧备份: $(basename "$old_backup")"
+            done
+        fi
+    fi
 }
 
 # 清理缓存脚本
@@ -208,11 +254,28 @@ update_uls() {
         return 1
     fi
 
-    log_info "当前版本: $SCRIPT_VERSION"
-    log_info "最新版本: $latest_version"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${GREEN}当前版本:${NC} ${BOLD}v$SCRIPT_VERSION${NC}"
+    echo -e "${GREEN}最新版本:${NC} ${BOLD}v$latest_version${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 
-    if [ "$latest_version" != "$SCRIPT_VERSION" ]; then
-        log_info "发现新版本，正在下载..."
+    # 使用语义化版本比对
+    if version_lt "$SCRIPT_VERSION" "$latest_version"; then
+        echo ""
+        log_info "🎉 发现新版本可用!"
+        echo ""
+
+        # 询问是否更新
+        read -p "是否立即更新? (Y/n): " update_choice
+        update_choice=${update_choice:-Y}  # 默认为Y
+
+        if [[ ! $update_choice =~ ^[Yy] ]]; then
+            log_info "已取消更新"
+            return 0
+        fi
+
+        echo ""
+        log_info "正在下载新版本..."
 
         # 从GitHub Release下载，如果失败则从主分支下载
         local download_success=false
@@ -220,10 +283,10 @@ update_uls() {
 
         if curl -fsSL "$release_url" -o "$temp_file" 2>/dev/null; then
             download_success=true
-            log_info "从Release下载成功"
+            log_info "✓ 从Release下载成功"
         elif curl -fsSL "$SCRIPT_URL/uls.sh" -o "$temp_file" 2>/dev/null; then
             download_success=true
-            log_info "从主分支下载成功"
+            log_info "✓ 从主分支下载成功"
         fi
 
         if [ "$download_success" = true ] && [ -f "$temp_file" ]; then
@@ -231,7 +294,9 @@ update_uls() {
             if bash -n "$temp_file" 2>/dev/null; then
                 # 备份当前版本
                 mkdir -p "$CONFIG_DIR/backup"
-                cp "$0" "$CONFIG_DIR/backup/uls_${SCRIPT_VERSION}_$(date +%Y%m%d_%H%M%S).sh"
+                local backup_file="$CONFIG_DIR/backup/uls_${SCRIPT_VERSION}_$(date +%Y%m%d_%H%M%S).sh"
+                cp "$0" "$backup_file"
+                log_info "✓ 已备份当前版本到: $backup_file"
 
                 # 更新脚本
                 cp "$temp_file" "$0"
@@ -241,12 +306,19 @@ update_uls() {
                 if [ -f "$INSTALL_DIR/uls" ]; then
                     cp "$temp_file" "$INSTALL_DIR/uls"
                     chmod +x "$INSTALL_DIR/uls"
+                    log_info "✓ 已更新系统命令"
                 fi
 
                 rm -f "$temp_file"
 
-                log_success "ULS脚本已更新到版本 $latest_version"
+                # 清理旧备份
+                clean_old_backups
+
+                echo ""
+                log_success "🎊 ULS脚本已成功更新到版本 v$latest_version"
+                echo ""
                 log_info "重新启动脚本中..."
+                sleep 2
                 exec "$0"
             else
                 log_error "下载的文件语法检查失败"
@@ -258,7 +330,9 @@ update_uls() {
             return 1
         fi
     else
-        log_info "当前已是最新版本"
+        echo ""
+        log_success "✓ 当前已是最新版本"
+        echo ""
     fi
 }
 
@@ -331,7 +405,7 @@ main_loop() {
     while true; do
         show_menu
 
-        read -p "请输入选项 (0-10): " choice
+        read -p "请输入选项 (0-11): " choice
 
         case $choice in
             1)
@@ -352,25 +426,29 @@ main_loop() {
                 ;;
             5)
                 echo
-                run_script "setup_dns.sh"
+                run_script "security_monitor.sh"
                 ;;
             6)
                 echo
-                run_script "migrate_volumes.sh"
+                run_script "setup_dns.sh"
                 ;;
             7)
                 echo
-                run_script "setup_v2bx.sh"
+                run_script "migrate_volumes.sh"
                 ;;
             8)
                 echo
-                run_script "server_benchmark.sh"
+                run_script "setup_v2bx.sh"
                 ;;
             9)
                 echo
-                update_uls
+                run_script "server_benchmark.sh"
                 ;;
             10)
+                echo
+                update_uls
+                ;;
+            11)
                 echo
                 uninstall_uls
                 ;;

@@ -74,6 +74,33 @@ chmod +x setup_fail2ban.sh
 sudo ./setup_fail2ban.sh
 ```
 
+#### 🔍 安全监控管理工具
+UFW和Fail2ban的集中监控管理平台，提供实时监控、IP管理、统计报告等功能。
+
+```bash
+wget -O security_monitor.sh https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/scripts/security/security_monitor.sh
+chmod +x security_monitor.sh
+sudo ./security_monitor.sh
+```
+
+**核心功能：**
+- 📊 **UFW拦截监控** - 查看最新拦截日志、Top 10攻击IP、被攻击端口统计
+- 🚫 **Fail2ban封禁管理** - 查看所有Jail的封禁列表、封禁数量统计
+- 🔴 **实时监控** - 自动刷新显示最新拦截和封禁情况(5秒刷新)
+- 🎯 **IP管理功能**：
+  - 解封IP (从所有Fail2ban Jail中移除)
+  - 封禁IP (添加到指定Jail)
+  - 查看UFW规则列表
+  - 添加/删除UFW规则
+- 📈 **统计报告** - 今日/昨日/总计拦截统计、Top 10攻击源分析
+- 💾 **日志导出** - 一键导出UFW和Fail2ban完整日志及统计报告
+
+**界面特点：**
+- 🎨 彩色交互式界面，操作直观
+- 🖥️ 实时显示UFW和Fail2ban服务状态
+- 📋 分类清晰的菜单结构
+- ⚡ 快速查看系统安全状况
+
 ### 🌐 网络配置脚本
 
 #### 🌐 DNS配置锁定脚本

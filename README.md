@@ -8,19 +8,7 @@
 
 使用 `uls.sh` 统一管理脚本，提供交互式菜单，无需记忆复杂命令：
 
-#### 方式一: 一键安装运行 (推荐)
-
-使用短链接:
-```bash
-curl -fsSL https://l.czl.net/q/uls | sudo bash
-```
-
-或使用完整链接:
-```bash
-curl -fsSL https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/uls.sh | sudo bash
-```
-
-#### 方式二: 下载后运行
+#### 一键安装运行 (推荐)
 
 ```bash
 # 使用短链接
@@ -29,6 +17,9 @@ curl -fsSL https://l.czl.net/q/uls -o uls.sh && chmod +x uls.sh && sudo ./uls.sh
 # 或使用完整链接
 curl -fsSL https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/uls.sh -o uls.sh && chmod +x uls.sh && sudo ./uls.sh
 ```
+
+> **💡 提示:** ULS工具箱需要交互式终端运行,因此不支持通过管道直接执行 (如 `curl ... | bash`)。
+> 如果尝试通过管道运行,脚本会自动提示正确的安装命令。
 
 **ULS工具箱功能：**
 - 🎯 交互式菜单，操作简单直观

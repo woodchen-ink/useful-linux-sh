@@ -116,7 +116,10 @@ run_script() {
 
 # 显示主菜单
 show_menu() {
-    clear
+    # 只有在交互式终端时才清屏
+    if [ -t 0 ]; then
+        clear
+    fi
     echo -e "${CYAN}╔══════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${CYAN}║${WHITE}                    ULS - Useful Linux Scripts                   ${CYAN}║${NC}"
     echo -e "${CYAN}║${WHITE}                       常用Linux脚本工具箱                        ${CYAN}║${NC}"
@@ -433,6 +436,23 @@ main() {
             exit 0
             ;;
     esac
+
+    # 检测是否通过管道运行
+    if [ ! -t 0 ]; then
+        echo -e "${YELLOW}╔════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${YELLOW}║  检测到通过管道运行,ULS需要交互式终端才能正常使用   ║${NC}"
+        echo -e "${YELLOW}╚════════════════════════════════════════════════════════════╝${NC}"
+        echo
+        echo -e "${GREEN}请使用以下命令下载并运行:${NC}"
+        echo
+        echo -e "${CYAN}# 使用短链接:${NC}"
+        echo -e "curl -fsSL https://l.czl.net/q/uls -o uls.sh && chmod +x uls.sh && sudo ./uls.sh"
+        echo
+        echo -e "${CYAN}# 或使用完整链接:${NC}"
+        echo -e "curl -fsSL https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/uls.sh -o uls.sh && chmod +x uls.sh && sudo ./uls.sh"
+        echo
+        exit 1
+    fi
 
     # 检查权限
     check_root

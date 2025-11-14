@@ -104,13 +104,22 @@ sudo ./security_monitor.sh
 ### 🌐 网络配置脚本
 
 #### 🌐 DNS配置锁定脚本
-设置DNS为8.8.8.8和1.1.1.1，通过多种机制防止DNS配置被篡改。支持systemd-resolved和传统resolv.conf两种模式，包含自动恢复和定时检查功能。
+设置DNS为8.8.8.8和1.1.1.1，自动检测并支持IPv6 DNS服务器，通过多种机制防止DNS配置被篡改。支持systemd-resolved和传统resolv.conf两种模式，包含自动恢复和定时检查功能。
 
 ```bash
 wget -O setup_dns.sh https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/scripts/network/setup_dns.sh
 chmod +x setup_dns.sh
 sudo ./setup_dns.sh
 ```
+
+**功能特性：**
+- 🌐 **IPv4 DNS**: Google DNS (8.8.8.8) 和 Cloudflare DNS (1.1.1.1)
+- 🌐 **IPv6 DNS**: 自动检测IPv6支持，配置对应IPv6 DNS服务器
+  - Google IPv6 DNS: 2001:4860:4860::8888
+  - Cloudflare IPv6 DNS: 2606:4700:4700::1111
+- 🔒 **多重保护**: chattr锁定 + systemd定时检查 + 自动恢复
+- 🔧 **智能适配**: 支持systemd-resolved和传统resolv.conf模式
+- ✅ **完整测试**: 同时测试IPv4和IPv6解析功能
 
 卸载DNS锁定：
 ```bash

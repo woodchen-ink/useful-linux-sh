@@ -12,6 +12,11 @@ NC='\033[0m' # No Color
 # DNS服务器配置
 PRIMARY_DNS="8.8.8.8"
 SECONDARY_DNS="1.1.1.1"
+PRIMARY_DNS_V6="2001:4860:4860::8888"
+SECONDARY_DNS_V6="2606:4700:4700::1111"
+
+# 是否支持IPv6
+HAS_IPV6=false
 
 # 日志函数
 log_info() {
@@ -53,6 +58,26 @@ detect_os() {
     log_info "检测到操作系统: $OS $VERSION"
 }
 
+# 检测IPv6支持
+detect_ipv6() {
+    log_step "检测IPv6支持..."
+
+    # 检查是否有IPv6地址(排除本地链路地址)
+    if ip -6 addr show scope global 2>/dev/null | grep -q "inet6"; then
+        HAS_IPV6=true
+        log_info "检测到IPv6支持已启用"
+
+        # 显示IPv6地址
+        local ipv6_addr=$(ip -6 addr show scope global | grep inet6 | head -1 | awk '{print $2}' | cut -d'/' -f1)
+        if [ -n "$ipv6_addr" ]; then
+            log_info "IPv6地址: $ipv6_addr"
+        fi
+    else
+        HAS_IPV6=false
+        log_warn "未检测到IPv6支持，将仅配置IPv4 DNS"
+    fi
+}
+
 # 备份原始配置
 backup_config() {
     log_step "备份原始DNS配置..."
@@ -92,15 +117,22 @@ configure_dns_services() {
             1)
                 log_info "配置 systemd-resolved 使用指定DNS..."
                 mkdir -p /etc/systemd/resolved.conf.d
-                cat > /etc/systemd/resolved.conf.d/dns.conf << EOF
+
+                # 构建DNS列表
+                local dns_list="$PRIMARY_DNS $SECONDARY_DNS"
+                if [ "$HAS_IPV6" = "true" ]; then
+                    dns_list="$dns_list $PRIMARY_DNS_V6 $SECONDARY_DNS_V6"
+                fi
+
+                cat > /etc/systemd/resolved.conf.d/dns.conf << RESOLV_EOF
 [Resolve]
-DNS=$PRIMARY_DNS $SECONDARY_DNS
+DNS=$dns_list
 FallbackDNS=
 DNSSEC=yes
 DNSOverTLS=opportunistic
 Cache=yes
 DNSStubListener=yes
-EOF
+RESOLV_EOF
                 systemctl restart systemd-resolved
                 # 确保 /etc/resolv.conf 指向 systemd-resolved
                 if [ ! -L /etc/resolv.conf ] || [ "$(readlink /etc/resolv.conf)" != "../run/systemd/resolve/stub-resolv.conf" ]; then
@@ -146,26 +178,46 @@ configure_dns() {
 
     if [ "$SYSTEMD_RESOLVED_MODE" = "true" ]; then
         log_info "DNS通过 systemd-resolved 配置完成"
-        log_info "  主DNS: $PRIMARY_DNS (Google DNS)"
-        log_info "  备DNS: $SECONDARY_DNS (Cloudflare DNS)"
+        log_info "  IPv4 主DNS: $PRIMARY_DNS (Google DNS)"
+        log_info "  IPv4 备DNS: $SECONDARY_DNS (Cloudflare DNS)"
+        if [ "$HAS_IPV6" = "true" ]; then
+            log_info "  IPv6 主DNS: $PRIMARY_DNS_V6 (Google DNS)"
+            log_info "  IPv6 备DNS: $SECONDARY_DNS_V6 (Cloudflare DNS)"
+        fi
     else
         # 创建新的 resolv.conf
-        cat > /etc/resolv.conf << EOF
+        cat > /etc/resolv.conf << RESOLV_CONF_EOF
 # DNS配置 - 由setup_dns.sh脚本生成
 # 请勿手动修改此文件
 nameserver $PRIMARY_DNS
 nameserver $SECONDARY_DNS
+RESOLV_CONF_EOF
+
+        # 如果支持IPv6,添加IPv6 DNS
+        if [ "$HAS_IPV6" = "true" ]; then
+            cat >> /etc/resolv.conf << RESOLV_CONF_V6_EOF
+nameserver $PRIMARY_DNS_V6
+nameserver $SECONDARY_DNS_V6
+RESOLV_CONF_V6_EOF
+        fi
+
+        # 添加选项配置
+        cat >> /etc/resolv.conf << RESOLV_CONF_OPT_EOF
 
 # 选项配置
 options timeout:2
 options attempts:3
 options rotate
 options single-request-reopen
-EOF
+RESOLV_CONF_OPT_EOF
 
         log_info "DNS服务器已设置为:"
-        log_info "  主DNS: $PRIMARY_DNS (Google DNS)"
-        log_info "  备DNS: $SECONDARY_DNS (Cloudflare DNS)"
+        log_info "  IPv4 主DNS: $PRIMARY_DNS (Google DNS)"
+        log_info "  IPv4 备DNS: $SECONDARY_DNS (Cloudflare DNS)"
+        if [ "$HAS_IPV6" = "true" ]; then
+            log_info "  IPv6 主DNS: $PRIMARY_DNS_V6 (Google DNS)"
+            log_info "  IPv6 备DNS: $SECONDARY_DNS_V6 (Cloudflare DNS)"
+        fi
     fi
 }
 
@@ -189,11 +241,19 @@ lock_dns_config() {
     fi
 
     # 创建保护脚本
-    cat > /usr/local/bin/protect-dns.sh << 'EOF'
+    cat > /usr/local/bin/protect-dns.sh << 'PROTECT_SCRIPT_EOF'
 #!/bin/bash
 # DNS保护脚本
 PRIMARY_DNS="8.8.8.8"
 SECONDARY_DNS="1.1.1.1"
+PRIMARY_DNS_V6="2001:4860:4860::8888"
+SECONDARY_DNS_V6="2606:4700:4700::1111"
+
+# 检测IPv6支持
+HAS_IPV6=false
+if ip -6 addr show scope global 2>/dev/null | grep -q "inet6"; then
+    HAS_IPV6=true
+fi
 
 # 检查DNS配置是否被修改
 check_dns() {
@@ -204,18 +264,30 @@ check_dns() {
         chattr -i /etc/resolv.conf 2>/dev/null
 
         # 恢复配置
-        cat > /etc/resolv.conf << DNSEOF
+        cat > /etc/resolv.conf << DNS_RESTORE_EOF
 # DNS配置 - 由setup_dns.sh脚本生成
 # 请勿手动修改此文件
-nameserver \$PRIMARY_DNS
-nameserver \$SECONDARY_DNS
+nameserver $PRIMARY_DNS
+nameserver $SECONDARY_DNS
+DNS_RESTORE_EOF
+
+        # 如果支持IPv6,添加IPv6 DNS
+        if [ "$HAS_IPV6" = "true" ]; then
+            cat >> /etc/resolv.conf << DNS_RESTORE_V6_EOF
+nameserver $PRIMARY_DNS_V6
+nameserver $SECONDARY_DNS_V6
+DNS_RESTORE_V6_EOF
+        fi
+
+        # 添加选项配置
+        cat >> /etc/resolv.conf << DNS_RESTORE_OPT_EOF
 
 # 选项配置
 options timeout:2
 options attempts:3
 options rotate
 options single-request-reopen
-DNSEOF
+DNS_RESTORE_OPT_EOF
 
         # 重新锁定
         chattr +i /etc/resolv.conf 2>/dev/null
@@ -224,7 +296,7 @@ DNSEOF
 }
 
 check_dns
-EOF
+PROTECT_SCRIPT_EOF
 
     chmod +x /usr/local/bin/protect-dns.sh
 
@@ -300,18 +372,44 @@ restart_network() {
 test_dns() {
     log_step "测试DNS解析..."
 
-    # 测试域名解析
+    # 测试IPv4域名解析
+    log_info "测试IPv4 DNS解析..."
     local test_domains=("google.com" "cloudflare.com" "github.com")
     local success_count=0
 
     for domain in "${test_domains[@]}"; do
         if nslookup $domain >/dev/null 2>&1; then
-            log_info "✓ $domain 解析成功"
+            log_info "✓ $domain IPv4 解析成功"
             ((success_count++))
         else
-            log_error "✗ $domain 解析失败"
+            log_error "✗ $domain IPv4 解析失败"
         fi
     done
+
+    # 如果支持IPv6,测试IPv6解析
+    if [ "$HAS_IPV6" = "true" ]; then
+        log_info "测试IPv6 DNS解析..."
+        local ipv6_success=0
+
+        for domain in "${test_domains[@]}"; do
+            # 使用dig查询AAAA记录
+            if command -v dig >/dev/null 2>&1; then
+                if dig @"$PRIMARY_DNS_V6" "$domain" AAAA +short +time=3 +tries=2 >/dev/null 2>&1; then
+                    log_info "✓ $domain IPv6 解析成功"
+                    ((ipv6_success++))
+                else
+                    log_warn "✗ $domain IPv6 解析失败"
+                fi
+            else
+                log_warn "dig命令不可用，跳过IPv6解析测试"
+                break
+            fi
+        done
+
+        if [ $ipv6_success -gt 0 ]; then
+            log_info "IPv6 DNS解析测试成功"
+        fi
+    fi
 
     if [ $success_count -eq ${#test_domains[@]} ]; then
         log_info "DNS配置测试完全成功！"
@@ -326,10 +424,18 @@ test_dns() {
 # 显示配置信息
 show_config_info() {
     echo -e "\n${GREEN}=== DNS配置完成 ===${NC}"
-    echo -e "主DNS服务器: ${BLUE}$PRIMARY_DNS${NC} (Google DNS)"
-    echo -e "备DNS服务器: ${BLUE}$SECONDARY_DNS${NC} (Cloudflare DNS)"
-    echo -e "配置文件: ${BLUE}/etc/resolv.conf${NC}"
-    echo -e "保护状态: ${GREEN}已启用${NC}"
+    echo -e "${YELLOW}IPv4 DNS服务器:${NC}"
+    echo -e "  主DNS: ${BLUE}$PRIMARY_DNS${NC} (Google DNS)"
+    echo -e "  备DNS: ${BLUE}$SECONDARY_DNS${NC} (Cloudflare DNS)"
+
+    if [ "$HAS_IPV6" = "true" ]; then
+        echo -e "${YELLOW}IPv6 DNS服务器:${NC}"
+        echo -e "  主DNS: ${BLUE}$PRIMARY_DNS_V6${NC} (Google DNS)"
+        echo -e "  备DNS: ${BLUE}$SECONDARY_DNS_V6${NC} (Cloudflare DNS)"
+    fi
+
+    echo -e "${YELLOW}配置文件:${NC} ${BLUE}/etc/resolv.conf${NC}"
+    echo -e "${YELLOW}保护状态:${NC} ${GREEN}已启用${NC}"
     echo -e "\n${YELLOW}注意事项:${NC}"
     echo -e "1. DNS配置已被锁定，系统会自动恢复任何修改"
     echo -e "2. 如需解锁，请运行: ${BLUE}chattr -i /etc/resolv.conf${NC}"
@@ -371,7 +477,7 @@ uninstall() {
 # 主函数
 main() {
     echo -e "${GREEN}DNS配置脚本${NC}"
-    echo -e "设置DNS为 8.8.8.8 和 1.1.1.1，并防止更改"
+    echo -e "设置DNS为 8.8.8.8 和 1.1.1.1，支持IPv6，并防止更改"
     echo ""
 
     # 检查参数
@@ -386,6 +492,9 @@ main() {
 
     # 检测系统
     detect_os
+
+    # 检测IPv6支持
+    detect_ipv6
 
     # 执行配置步骤
     backup_config

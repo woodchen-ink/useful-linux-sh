@@ -267,8 +267,23 @@ list_forward_rules() {
     echo_info "当前端口转发规则"
     echo ""
 
+    # 调试信息
+    echo_info "配置文件路径: $CONFIG_FILE"
+    if [ -f "$CONFIG_FILE" ]; then
+        local line_count=$(wc -l < "$CONFIG_FILE" 2>/dev/null || echo "0")
+        echo_info "配置文件行数: $line_count"
+    else
+        echo_warn "配置文件不存在"
+    fi
+    echo ""
+
     if [ ! -f "$CONFIG_FILE" ] || [ ! -s "$CONFIG_FILE" ]; then
-        echo_warn "暂无转发规则"
+        echo_warn "配置文件中暂无转发规则"
+        echo ""
+        # 即使配置文件为空，也显示iptables中的规则
+        echo_info "检查iptables中的NAT规则:"
+        echo ""
+        iptables -t nat -L PREROUTING -n -v --line-numbers | grep DNAT || echo_warn "iptables中无DNAT规则"
         return 0
     fi
 
@@ -375,20 +390,52 @@ delete_forward_rule() {
 # 清空所有转发规则
 clear_all_rules() {
     echo ""
-    echo_warn "⚠️  警告: 此操作将清空所有端口转发规则"
+    echo_warn "⚠️  警告: 此操作将删除配置文件中记录的所有端口转发规则"
+    echo_info "只会删除由本脚本管理的规则,不会影响其他iptables规则"
     echo ""
 
+    if [ ! -f "$CONFIG_FILE" ] || [ ! -s "$CONFIG_FILE" ]; then
+        echo_warn "配置文件中没有规则需要清空"
+        return 0
+    fi
+
+    # 显示将要删除的规则
+    echo_info "将删除以下规则:"
+    echo ""
+
+    local index=1
+    while IFS='|' read -r protocol src_ip src_port dst_ip dst_port comment; do
+        [ -z "$protocol" ] && continue
+        echo "  $index. $protocol $src_ip:$src_port -> $dst_ip:$dst_port"
+        ((index++))
+    done < "$CONFIG_FILE"
+
+    echo ""
     read -p "确认清空所有规则? (输入 'yes' 确认): " confirm
     if [ "$confirm" != "yes" ]; then
         echo_warn "已取消"
         return 0
     fi
 
-    echo_info "清空iptables NAT规则..."
+    echo_info "删除iptables规则..."
 
-    # 清空NAT表的PREROUTING和POSTROUTING链
-    iptables -t nat -F PREROUTING
-    iptables -t nat -F POSTROUTING
+    # 逐条删除iptables规则
+    local count=0
+    while IFS='|' read -r protocol src_ip src_port dst_ip dst_port comment; do
+        [ -z "$protocol" ] && continue
+
+        # 删除PREROUTING规则
+        iptables -t nat -D PREROUTING -p "$protocol" --dport "$src_port" -j DNAT --to-destination "$dst_ip:$dst_port" 2>/dev/null && \
+            echo_info "已删除 DNAT: $protocol $src_ip:$src_port -> $dst_ip:$dst_port" || \
+            echo_warn "DNAT规则可能已不存在: $protocol $src_ip:$src_port"
+
+        # 删除POSTROUTING规则
+        iptables -t nat -D POSTROUTING -p "$protocol" -d "$dst_ip" --dport "$dst_port" -j SNAT --to-source "$src_ip" 2>/dev/null && \
+            echo_info "已删除 SNAT: $protocol -> $dst_ip:$dst_port" || \
+            echo_warn "SNAT规则可能已不存在: $protocol -> $dst_ip:$dst_port"
+
+        ((count++))
+    done < "$CONFIG_FILE"
 
     # 清空配置文件
     > "$CONFIG_FILE"
@@ -396,7 +443,8 @@ clear_all_rules() {
     # 保存iptables规则
     save_iptables
 
-    echo_success "所有转发规则已清空"
+    echo ""
+    echo_success "已删除 $count 条转发规则"
 }
 
 # 保存iptables规则
@@ -444,6 +492,74 @@ restore_rules() {
     echo_success "已恢复 $count 条转发规则"
 }
 
+# 从iptables导入现有规则
+import_from_iptables() {
+    echo ""
+    echo_info "从iptables导入现有的端口转发规则"
+    echo ""
+
+    # 获取本机IP
+    local local_ip
+    local_ip=$(get_primary_ip)
+    if [ -z "$local_ip" ]; then
+        echo_error "无法获取本机IP地址"
+        return 1
+    fi
+
+    # 获取所有DNAT规则
+    local rules
+    rules=$(iptables -t nat -L PREROUTING -n --line-numbers | grep DNAT)
+
+    if [ -z "$rules" ]; then
+        echo_warn "iptables中没有发现DNAT规则"
+        return 0
+    fi
+
+    echo_info "发现以下DNAT规则:"
+    echo ""
+    echo "$rules"
+    echo ""
+
+    read -p "是否导入这些规则到配置文件? (y/N): " confirm
+    if [[ ! $confirm =~ ^[Yy] ]]; then
+        echo_warn "已取消导入"
+        return 0
+    fi
+
+    # 解析并导入规则
+    local count=0
+    while read -r line; do
+        # 跳过标题行
+        [[ "$line" =~ ^num ]] && continue
+        [[ "$line" =~ ^Chain ]] && continue
+        [ -z "$line" ] && continue
+
+        # 提取协议、端口和目标
+        local protocol=$(echo "$line" | awk '{print $4}')
+        local dport=$(echo "$line" | awk '{print $7}' | sed 's/dpt://')
+        local to_dest=$(echo "$line" | awk '{print $NF}' | sed 's/to://')
+
+        # 分离目标IP和端口
+        local dst_ip="${to_dest%:*}"
+        local dst_port="${to_dest#*:}"
+
+        # 验证数据
+        if validate_ip "$dst_ip" && validate_port "$dport" && validate_port "$dst_port"; then
+            # 检查是否已存在
+            if ! grep -q "^${protocol}|.*|${dport}|${dst_ip}|${dst_port}|" "$CONFIG_FILE" 2>/dev/null; then
+                echo "${protocol}|${local_ip}|${dport}|${dst_ip}|${dst_port}|Imported from iptables" >> "$CONFIG_FILE"
+                echo_success "已导入: ${protocol} ${local_ip}:${dport} -> ${dst_ip}:${dst_port}"
+                ((count++))
+            else
+                echo_info "跳过重复规则: ${protocol} ${local_ip}:${dport} -> ${dst_ip}:${dst_port}"
+            fi
+        fi
+    done <<< "$rules"
+
+    echo ""
+    echo_success "成功导入 $count 条规则"
+}
+
 # 显示菜单
 show_menu() {
     echo ""
@@ -456,6 +572,7 @@ show_menu() {
     echo -e "  ${BLUE}3.${NC} 删除转发规则"
     echo -e "  ${BLUE}4.${NC} 清空所有规则"
     echo -e "  ${BLUE}5.${NC} 恢复保存的规则"
+    echo -e "  ${BLUE}6.${NC} 从iptables导入规则"
     echo -e "  ${RED}0.${NC} 返回主菜单"
     echo ""
 }
@@ -467,7 +584,7 @@ main() {
 
     while true; do
         show_menu
-        read -p "请选择 (0-5): " choice
+        read -p "请选择 (0-6): " choice
 
         case $choice in
             1)
@@ -484,6 +601,9 @@ main() {
                 ;;
             5)
                 restore_rules
+                ;;
+            6)
+                import_from_iptables
                 ;;
             0)
                 echo ""

@@ -233,21 +233,35 @@ add_forward_rule() {
     # 添加iptables规则
     echo_info "添加iptables规则..."
 
+    # 检查UFW是否运行
+    local ufw_active=false
+    if command -v ufw >/dev/null 2>&1 && ufw status | grep -q "Status: active"; then
+        ufw_active=true
+        echo_info "检测到UFW防火墙已启用"
+    fi
+
     if [[ "$protocol" == "both" ]]; then
-        # TCP规则
+        # TCP规则 - PREROUTING用于外部流量，使用MASQUERADE自动选择源IP
         iptables -t nat -A PREROUTING -p tcp --dport "$src_port" -j DNAT --to-destination "$dst_ip:$dst_port"
-        iptables -t nat -A POSTROUTING -p tcp -d "$dst_ip" --dport "$dst_port" -j SNAT --to-source "$local_ip"
+        iptables -t nat -A POSTROUTING -p tcp -d "$dst_ip" --dport "$dst_port" -j MASQUERADE
 
         # UDP规则
         iptables -t nat -A PREROUTING -p udp --dport "$src_port" -j DNAT --to-destination "$dst_ip:$dst_port"
-        iptables -t nat -A POSTROUTING -p udp -d "$dst_ip" --dport "$dst_port" -j SNAT --to-source "$local_ip"
+        iptables -t nat -A POSTROUTING -p udp -d "$dst_ip" --dport "$dst_port" -j MASQUERADE
+
+        # 添加FORWARD规则允许转发流量（解决UFW阻止问题）
+        iptables -A FORWARD -p tcp -d "$dst_ip" --dport "$dst_port" -j ACCEPT
+        iptables -A FORWARD -p udp -d "$dst_ip" --dport "$dst_port" -j ACCEPT
 
         # 保存到配置文件
         echo "tcp|$local_ip|$src_port|$dst_ip|$dst_port|$comment" >> "$CONFIG_FILE"
         echo "udp|$local_ip|$src_port|$dst_ip|$dst_port|$comment" >> "$CONFIG_FILE"
     else
         iptables -t nat -A PREROUTING -p "$protocol" --dport "$src_port" -j DNAT --to-destination "$dst_ip:$dst_port"
-        iptables -t nat -A POSTROUTING -p "$protocol" -d "$dst_ip" --dport "$dst_port" -j SNAT --to-source "$local_ip"
+        iptables -t nat -A POSTROUTING -p "$protocol" -d "$dst_ip" --dport "$dst_port" -j MASQUERADE
+
+        # 添加FORWARD规则允许转发流量
+        iptables -A FORWARD -p "$protocol" -d "$dst_ip" --dport "$dst_port" -j ACCEPT
 
         # 保存到配置文件
         echo "$protocol|$local_ip|$src_port|$dst_ip|$dst_port|$comment" >> "$CONFIG_FILE"
@@ -373,9 +387,15 @@ delete_forward_rule() {
     iptables -t nat -D PREROUTING -p "$protocol" --dport "$src_port" -j DNAT --to-destination "$dst_ip:$dst_port" 2>/dev/null || \
         echo_warn "PREROUTING规则可能已不存在"
 
-    # 删除POSTROUTING规则
-    iptables -t nat -D POSTROUTING -p "$protocol" -d "$dst_ip" --dport "$dst_port" -j SNAT --to-source "$src_ip" 2>/dev/null || \
+    # 删除POSTROUTING规则 - 尝试删除MASQUERADE规则（新格式）
+    iptables -t nat -D POSTROUTING -p "$protocol" -d "$dst_ip" --dport "$dst_port" -j MASQUERADE 2>/dev/null || \
+        # 兼容旧的SNAT规则
+        iptables -t nat -D POSTROUTING -p "$protocol" -d "$dst_ip" --dport "$dst_port" -j SNAT --to-source "$src_ip" 2>/dev/null || \
         echo_warn "POSTROUTING规则可能已不存在"
+
+    # 删除FORWARD规则
+    iptables -D FORWARD -p "$protocol" -d "$dst_ip" --dport "$dst_port" -j ACCEPT 2>/dev/null || \
+        echo_warn "FORWARD规则可能已不存在"
 
     # 从配置文件删除
     sed -i "${rule_num}d" "$CONFIG_FILE"
@@ -429,10 +449,13 @@ clear_all_rules() {
             echo_info "已删除 DNAT: $protocol $src_ip:$src_port -> $dst_ip:$dst_port" || \
             echo_warn "DNAT规则可能已不存在: $protocol $src_ip:$src_port"
 
-        # 删除POSTROUTING规则
-        iptables -t nat -D POSTROUTING -p "$protocol" -d "$dst_ip" --dport "$dst_port" -j SNAT --to-source "$src_ip" 2>/dev/null && \
-            echo_info "已删除 SNAT: $protocol -> $dst_ip:$dst_port" || \
-            echo_warn "SNAT规则可能已不存在: $protocol -> $dst_ip:$dst_port"
+        # 删除POSTROUTING规则 - 尝试新格式和旧格式
+        iptables -t nat -D POSTROUTING -p "$protocol" -d "$dst_ip" --dport "$dst_port" -j MASQUERADE 2>/dev/null || \
+            iptables -t nat -D POSTROUTING -p "$protocol" -d "$dst_ip" --dport "$dst_port" -j SNAT --to-source "$src_ip" 2>/dev/null || \
+            echo_warn "POSTROUTING规则可能已不存在: $protocol -> $dst_ip:$dst_port"
+
+        # 删除FORWARD规则
+        iptables -D FORWARD -p "$protocol" -d "$dst_ip" --dport "$dst_port" -j ACCEPT 2>/dev/null || true
 
         ((count++))
     done < "$CONFIG_FILE"
@@ -482,9 +505,11 @@ restore_rules() {
         # 跳过空行
         [ -z "$protocol" ] && continue
 
-        # 添加iptables规则
+        # 添加iptables规则 - 使用MASQUERADE
         iptables -t nat -A PREROUTING -p "$protocol" --dport "$src_port" -j DNAT --to-destination "$dst_ip:$dst_port" 2>/dev/null || true
-        iptables -t nat -A POSTROUTING -p "$protocol" -d "$dst_ip" --dport "$dst_port" -j SNAT --to-source "$src_ip" 2>/dev/null || true
+        iptables -t nat -A POSTROUTING -p "$protocol" -d "$dst_ip" --dport "$dst_port" -j MASQUERADE 2>/dev/null || true
+        # 添加FORWARD规则
+        iptables -A FORWARD -p "$protocol" -d "$dst_ip" --dport "$dst_port" -j ACCEPT 2>/dev/null || true
 
         ((count++))
     done < "$CONFIG_FILE"

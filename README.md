@@ -126,6 +126,46 @@ sudo ./setup_dns.sh
 sudo ./setup_dns.sh --uninstall
 ```
 
+#### 🌍 IPv6管理工具
+提供IPv4优先级设置和IPv6禁用功能，解决IPv6网络环境下的连接问题，配置灵活易用。
+
+```bash
+wget -O ipv6_manager.sh https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/scripts/network/ipv6_manager.sh
+chmod +x ipv6_manager.sh
+sudo ./ipv6_manager.sh
+```
+
+**核心功能：**
+- 🎯 **IPv4优先级设置** - 保留IPv6但优先使用IPv4地址（推荐）
+  - 通过 `/etc/gai.conf` 配置地址族优先级
+  - 不影响IPv6功能，只改变连接顺序
+  - 适合双栈环境优化连接速度
+- 🚫 **完全禁用IPv6** - 彻底关闭IPv6功能
+  - 通过 sysctl 和 GRUB 双重禁用
+  - 适合纯IPv4环境或IPv6连接问题
+  - 需要重启系统完全生效
+- ✅ **启用IPv6** - 恢复IPv6功能
+  - 清理所有禁用配置
+  - 恢复系统默认IPv6设置
+- 🔄 **恢复默认优先级** - 还原系统默认地址族优先级
+- 📊 **状态查看** - 实时显示IPv6状态和网络地址
+  - IPv6启用/禁用状态
+  - 当前地址族优先级
+  - IPv4和IPv6地址列表
+- 💾 **自动备份** - 修改前自动备份配置文件
+
+**使用场景：**
+- 双栈环境下优化连接速度（优先IPv4）
+- 解决某些应用IPv6兼容性问题
+- 纯IPv4环境下禁用无用的IPv6
+- 测试和调试网络连接问题
+
+**配置说明：**
+- 地址族优先级配置文件：`/etc/gai.conf`
+- sysctl配置文件：`/etc/sysctl.conf`
+- GRUB配置文件：`/etc/default/grub`
+- 所有修改前都会自动备份，带时间戳
+
 ### 🐳 Docker管理脚本
 
 #### 🐳 Docker Volumes迁移脚本

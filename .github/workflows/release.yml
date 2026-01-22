@@ -3,7 +3,8 @@ name: Create Release
 on:
   push:
     tags:
-      - 'v*'  # 触发条件：推送以 v 开头的标签 (如 v1.1, v1.2.0)
+      - 'v*'      # 触发条件：推送以 v 开头的标签 (如 v1.1, v1.2.0)
+      - '[0-9]*'  # 也支持纯数字格式的标签 (如 1.4, 1.5)
 
 permissions:
   contents: write  # 允许创建 release 和上传文件
@@ -26,8 +27,9 @@ jobs:
     - name: Extract version from tag
       id: version
       run: |
-        # 从tag中提取版本号 (去掉 v 前缀)
-        VERSION=${GITHUB_REF#refs/tags/v}
+        # 从tag中提取版本号 (兼容 v1.4 和 1.4 两种格式)
+        VERSION=${GITHUB_REF#refs/tags/}
+        VERSION=${VERSION#v}  # 去掉可能的 v 前缀
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         echo "📦 Release version: $VERSION"
 

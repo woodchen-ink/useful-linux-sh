@@ -251,6 +251,8 @@ get_latest_release() {
         fi
     fi
 
+    # 移除可能的 v 前缀，统一返回纯数字版本号
+    latest_version=${latest_version#v}
     echo "$latest_version"
 }
 

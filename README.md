@@ -166,6 +166,51 @@ sudo ./ipv6_manager.sh
 - GRUB配置文件：`/etc/default/grub`
 - 所有修改前都会自动备份，带时间戳
 
+#### 🔌 GOST代理管理工具
+一键安装、配置和管理GOST代理服务，支持HTTP/HTTPS和SOCKS5协议，使用systemd进行服务管理。
+
+```bash
+wget -O setup_gost.sh https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/scripts/network/setup_gost.sh
+chmod +x setup_gost.sh
+sudo ./setup_gost.sh
+```
+
+**核心功能：**
+- 📦 **一键安装** - 自动检测系统架构(amd64/arm64)，下载对应版本
+- 🔧 **交互式配置**：
+  - 选择代理协议（HTTP/HTTPS 或 SOCKS5）
+  - 自定义监听端口
+  - 可选用户认证（用户名/密码）
+  - 端口占用检测
+- 🔄 **服务管理**：
+  - 启动/停止/重启代理服务
+  - 查看实时运行状态
+  - 查看服务日志
+  - 自动重启机制
+- 📊 **状态监控** - 显示服务状态、配置信息、监听端口、进程信息
+- 🗑️ **完整卸载** - 一键清理所有文件和配置
+
+**使用场景：**
+- 快速搭建HTTP/SOCKS5代理服务器
+- 内网穿透和流量转发
+- 开发测试环境代理配置
+- 多协议代理需求
+
+**配置文件位置：**
+- GOST二进制文件：`/usr/local/bin/gost`
+- systemd服务文件：`/etc/systemd/system/gost.service`
+- 配置信息文件：`/etc/gost/config.txt`
+
+**关于GOST：**
+- GOST是一个功能强大的GO语言编写的安全隧道工具
+- 支持多种协议：HTTP/HTTPS, SOCKS4/5, SS等
+- 项目地址：https://github.com/ginuerzh/gost
+- 当前支持版本：v2.12.0
+
+**支持架构：**
+- x86_64 (amd64)
+- aarch64 (arm64)
+
 ### 🐳 Docker管理脚本
 
 #### 🐳 Docker Volumes迁移脚本

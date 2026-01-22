@@ -119,6 +119,9 @@ run_script() {
         "setup_gost.sh")
             download_script "$script_name" "scripts/network/setup_gost.sh" || return 1
             ;;
+        "setup_warp.sh")
+            download_script "$script_name" "scripts/network/setup_warp.sh" || return 1
+            ;;
         *)
             log_error "未知脚本: $script_name"
             return 1
@@ -153,12 +156,13 @@ show_menu() {
     echo -e "${WHITE}  ${BLUE}7.${NC} ${GREEN}🔀 端口转发管理${NC}     - 配置防火墙端口转发规则"
     echo -e "${WHITE}  ${BLUE}8.${NC} ${GREEN}🌍 IPv6管理工具${NC}     - IPv4优先级/禁用IPv6"
     echo -e "${WHITE}  ${BLUE}9.${NC} ${GREEN}🔌 GOST代理管理${NC}     - HTTP/SOCKS5代理服务"
-    echo -e "${WHITE}  ${BLUE}10.${NC} ${GREEN}🐳 Docker Volumes迁移${NC} - 跨服务器迁移Docker卷"
-    echo -e "${WHITE}  ${BLUE}11.${NC} ${GREEN}🚄 V2bX节点管理${NC}     - V2board节点服务端管理"
-    echo -e "${WHITE}  ${BLUE}12.${NC} ${GREEN}📊 服务器性能测试${NC}   - 综合性能和网络测试"
+    echo -e "${WHITE}  ${BLUE}10.${NC} ${GREEN}☁️  WARP代理管理${NC}     - Cloudflare WARP代理"
+    echo -e "${WHITE}  ${BLUE}11.${NC} ${GREEN}🐳 Docker Volumes迁移${NC} - 跨服务器迁移Docker卷"
+    echo -e "${WHITE}  ${BLUE}12.${NC} ${GREEN}🚄 V2bX节点管理${NC}     - V2board节点服务端管理"
+    echo -e "${WHITE}  ${BLUE}13.${NC} ${GREEN}📊 服务器性能测试${NC}   - 综合性能和网络测试"
     echo
-    echo -e "${WHITE}  ${PURPLE}13.${NC} ${CYAN}🔄 更新ULS脚本${NC}      - 更新本管理脚本"
-    echo -e "${WHITE}  ${PURPLE}14.${NC} ${CYAN}🗑️  卸载ULS脚本${NC}     - 卸载并清理所有文件"
+    echo -e "${WHITE}  ${PURPLE}14.${NC} ${CYAN}🔄 更新ULS脚本${NC}      - 更新本管理脚本"
+    echo -e "${WHITE}  ${PURPLE}15.${NC} ${CYAN}🗑️  卸载ULS脚本${NC}     - 卸载并清理所有文件"
     echo
     echo -e "${WHITE}  ${RED}0.${NC} ${RED}❌ 退出程序${NC}"
     echo
@@ -460,21 +464,25 @@ main_loop() {
                 ;;
             10)
                 echo
-                run_script "migrate_volumes.sh"
+                run_script "setup_warp.sh"
                 ;;
             11)
                 echo
-                run_script "setup_v2bx.sh"
+                run_script "migrate_volumes.sh"
                 ;;
             12)
                 echo
-                run_script "server_benchmark.sh"
+                run_script "setup_v2bx.sh"
                 ;;
             13)
                 echo
-                update_uls
+                run_script "server_benchmark.sh"
                 ;;
             14)
+                echo
+                update_uls
+                ;;
+            15)
                 echo
                 uninstall_uls
                 ;;

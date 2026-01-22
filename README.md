@@ -211,6 +211,58 @@ sudo ./setup_gost.sh
 - x86_64 (amd64)
 - aarch64 (arm64)
 
+#### ☁️ Cloudflare WARP代理管理工具
+一键安装、配置和管理Cloudflare WARP代理服务，支持SOCKS5代理，提供完整的账号和IP管理功能。
+
+```bash
+wget -O setup_warp.sh https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/scripts/network/setup_warp.sh
+chmod +x setup_warp.sh
+sudo ./setup_warp.sh
+```
+
+**核心功能：**
+- 📦 **一键安装** - 自动检测系统类型，配置WARP软件源并安装
+- 🔧 **SOCKS5代理配置**：
+  - 自定义代理端口（默认40000）
+  - 自动注册WARP账号
+  - 自动连接并验证
+- 🔄 **服务管理**：
+  - 启用/禁用WARP服务
+  - 查看连接状态和配置信息
+  - 查看账户信息
+- 🔄 **账号管理**：
+  - 更换WARP账号
+  - 重新注册新账号
+- 🌐 **IP管理**：
+  - 快速更换出口IP
+  - 显示当前IP地址
+- 🧪 **连接测试**：
+  - 测试直连IP和WARP IP
+  - 测试代理延迟
+  - 验证代理可用性
+- 📊 **状态监控** - 显示连接状态、服务状态、账户信息
+- 🗑️ **完整卸载** - 一键清理所有文件和配置
+
+**使用场景：**
+- 解锁Cloudflare网络优化
+- 需要更换IP的应用场景
+- 作为SOCKS5代理使用
+- 绕过地理位置限制
+
+**支持系统：**
+- Debian/Ubuntu系列
+- CentOS/RHEL系列（7及以上）
+
+**配置文件位置：**
+- WARP配置目录：`/etc/cloudflare-warp/`
+- systemd服务：`warp-svc`
+
+**关于Cloudflare WARP：**
+- WARP是Cloudflare提供的免费VPN服务
+- 基于WireGuard协议，性能优秀
+- 提供1.1.1.1 with WARP的增强隐私保护
+- 官方文档：https://developers.cloudflare.com/warp-client/
+
 ### 🐳 Docker管理脚本
 
 #### 🐳 Docker Volumes迁移脚本

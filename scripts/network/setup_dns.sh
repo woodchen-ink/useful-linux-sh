@@ -157,6 +157,11 @@ configure_dns_services() {
 
                 mkdir -p /etc/systemd/resolved.conf.d
 
+                # 解锁可能存在的配置文件锁定
+                if [ -f /etc/systemd/resolved.conf.d/dns.conf ]; then
+                    chattr -i /etc/systemd/resolved.conf.d/dns.conf 2>/dev/null || true
+                fi
+
                 # 构建DNS列表
                 local dns_list="$PRIMARY_DNS $SECONDARY_DNS"
                 if [ "$CONFIGURE_IPV6" = "true" ]; then
@@ -301,7 +306,7 @@ lock_dns_config() {
     fi
 
     # 创建保护脚本(需要传递IPv6配置)
-    cat > /usr/local/bin/protect-dns.sh << PROTECT_SCRIPT_EOF
+    cat > /usr/local/bin/protect-dns.sh << 'PROTECT_SCRIPT_EOF'
 #!/bin/bash
 # DNS保护脚本
 PRIMARY_DNS="8.8.8.8"
@@ -310,30 +315,36 @@ PRIMARY_DNS_V6="2001:4860:4860::8888"
 SECONDARY_DNS_V6="2606:4700:4700::1111"
 
 # 用户配置的IPv6选项
-CONFIGURE_IPV6=$CONFIGURE_IPV6
 PROTECT_SCRIPT_EOF
+
+    # 追加IPv6配置变量
+    echo "CONFIGURE_IPV6=$CONFIGURE_IPV6" >> /usr/local/bin/protect-dns.sh
+
+    # 追加检查函数
+    cat >> /usr/local/bin/protect-dns.sh << 'PROTECT_SCRIPT_FUNC_EOF'
 
 # 检查DNS配置是否被修改
 check_dns() {
-    if ! grep -q "\$PRIMARY_DNS" /etc/resolv.conf || ! grep -q "\$SECONDARY_DNS" /etc/resolv.conf; then
+    if ! grep -q "$PRIMARY_DNS" /etc/resolv.conf || ! grep -q "$SECONDARY_DNS" /etc/resolv.conf; then
         echo "检测到DNS配置被修改，正在恢复..."
 
         # 解除锁定
         chattr -i /etc/resolv.conf 2>/dev/null
 
-        # 恢复配置
+        # 恢复配置 - 先写注释
         cat > /etc/resolv.conf << 'DNS_RESTORE_EOF'
 # DNS配置 - 由setup_dns.sh脚本生成
 # 请勿手动修改此文件
 DNS_RESTORE_EOF
 
-        echo "nameserver \$PRIMARY_DNS" >> /etc/resolv.conf
-        echo "nameserver \$SECONDARY_DNS" >> /etc/resolv.conf
+        # 添加DNS服务器
+        echo "nameserver $PRIMARY_DNS" >> /etc/resolv.conf
+        echo "nameserver $SECONDARY_DNS" >> /etc/resolv.conf
 
         # 如果用户选择配置IPv6,添加IPv6 DNS
-        if [ "\$CONFIGURE_IPV6" = "true" ]; then
-            echo "nameserver \$PRIMARY_DNS_V6" >> /etc/resolv.conf
-            echo "nameserver \$SECONDARY_DNS_V6" >> /etc/resolv.conf
+        if [ "$CONFIGURE_IPV6" = "true" ]; then
+            echo "nameserver $PRIMARY_DNS_V6" >> /etc/resolv.conf
+            echo "nameserver $SECONDARY_DNS_V6" >> /etc/resolv.conf
         fi
 
         # 添加选项配置
@@ -352,8 +363,9 @@ DNS_RESTORE_OPT_EOF
     fi
 }
 
+# 执行检查
 check_dns
-PROTECT_SCRIPT_EOF
+PROTECT_SCRIPT_FUNC_EOF
 
     chmod +x /usr/local/bin/protect-dns.sh
 

@@ -127,7 +127,13 @@ backup_config() {
 configure_dns_services() {
     log_step "配置DNS相关服务..."
 
-    # 检查并处理 systemd-resolved
+    # 先解除可能存在的resolv.conf锁定
+    if [ -f /etc/resolv.conf ]; then
+        chattr -i /etc/resolv.conf 2>/dev/null || true
+        log_info "已解除resolv.conf锁定（如果存在）"
+    fi
+
+    # 检查并处理 systemd-resolved (包括masked状态)
     if systemctl is-active --quiet systemd-resolved; then
         log_info "检测到 systemd-resolved 正在运行"
         log_warn "是否要停用 systemd-resolved？这可能影响某些系统功能"
@@ -142,6 +148,13 @@ configure_dns_services() {
         case $choice in
             1)
                 log_info "配置 systemd-resolved 使用指定DNS..."
+
+                # 检查服务是否被masked,如果是则unmask
+                if systemctl is-enabled systemd-resolved 2>&1 | grep -q "masked"; then
+                    log_warn "systemd-resolved 服务被masked,正在解除..."
+                    systemctl unmask systemd-resolved
+                fi
+
                 mkdir -p /etc/systemd/resolved.conf.d
 
                 # 构建DNS列表
@@ -159,17 +172,27 @@ DNSOverTLS=opportunistic
 Cache=yes
 DNSStubListener=yes
 RESOLV_EOF
-                systemctl restart systemd-resolved
+
+                # 启动并重启服务
+                systemctl enable systemd-resolved 2>/dev/null || true
+                systemctl restart systemd-resolved || {
+                    log_error "无法重启 systemd-resolved,切换到静态DNS配置模式"
+                    SYSTEMD_RESOLVED_MODE=false
+                    return
+                }
+
                 # 确保 /etc/resolv.conf 指向 systemd-resolved
                 if [ ! -L /etc/resolv.conf ] || [ "$(readlink /etc/resolv.conf)" != "../run/systemd/resolve/stub-resolv.conf" ]; then
+                    rm -f /etc/resolv.conf
                     ln -sf ../run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
                 fi
                 SYSTEMD_RESOLVED_MODE=true
                 ;;
             2)
                 log_info "停用 systemd-resolved..."
-                systemctl stop systemd-resolved
-                systemctl disable systemd-resolved
+                systemctl stop systemd-resolved 2>/dev/null || true
+                systemctl disable systemd-resolved 2>/dev/null || true
+                # 不要mask服务,只是停止和禁用
                 SYSTEMD_RESOLVED_MODE=false
                 ;;
             3)
@@ -177,6 +200,15 @@ RESOLV_EOF
                 SYSTEMD_RESOLVED_MODE=false
                 ;;
         esac
+    elif systemctl list-unit-files systemd-resolved.service 2>/dev/null | grep -q systemd-resolved; then
+        # systemd-resolved存在但未运行(可能被masked)
+        log_warn "检测到 systemd-resolved 服务存在但未运行"
+
+        if systemctl is-enabled systemd-resolved 2>&1 | grep -q "masked"; then
+            log_warn "服务已被masked,将使用静态DNS配置模式"
+        fi
+
+        SYSTEMD_RESOLVED_MODE=false
     else
         SYSTEMD_RESOLVED_MODE=false
     fi
@@ -211,6 +243,9 @@ configure_dns() {
             log_info "  IPv6 备DNS: $SECONDARY_DNS_V6 (Cloudflare DNS)"
         fi
     else
+        # 确保resolv.conf未被锁定
+        chattr -i /etc/resolv.conf 2>/dev/null || true
+
         # 创建新的 resolv.conf
         cat > /etc/resolv.conf << 'RESOLV_CONF_EOF'
 # DNS配置 - 由setup_dns.sh脚本生成
@@ -479,15 +514,34 @@ uninstall() {
     rm -f /etc/systemd/system/protect-dns.service
     rm -f /etc/systemd/system/protect-dns.timer
     rm -f /usr/local/bin/protect-dns.sh
+    systemctl daemon-reload
+
+    # 解锁systemd-resolved配置
+    if [ -f /etc/systemd/resolved.conf.d/dns.conf ]; then
+        chattr -i /etc/systemd/resolved.conf.d/dns.conf 2>/dev/null || true
+        rm -f /etc/systemd/resolved.conf.d/dns.conf
+        log_info "已删除 systemd-resolved 配置"
+    fi
 
     # 解锁resolv.conf
-    chattr -i /etc/resolv.conf 2>/dev/null
+    chattr -i /etc/resolv.conf 2>/dev/null || true
 
     # 恢复原始配置
-    local backup_file=$(ls /etc/resolv.conf.backup.* 2>/dev/null | tail -1)
+    local backup_file=$(ls -t /etc/resolv.conf.backup.* 2>/dev/null | head -1)
     if [ -n "$backup_file" ]; then
         cp "$backup_file" /etc/resolv.conf
-        log_info "已恢复原始DNS配置"
+        log_info "已恢复原始DNS配置: $backup_file"
+    else
+        log_warn "未找到备份文件，保持当前配置"
+    fi
+
+    # 如果systemd-resolved被unmask,询问是否恢复
+    if systemctl list-unit-files systemd-resolved.service 2>/dev/null | grep -q systemd-resolved; then
+        log_info "检测到 systemd-resolved 服务"
+        if systemctl is-enabled systemd-resolved >/dev/null 2>&1; then
+            systemctl restart systemd-resolved 2>/dev/null || true
+            log_info "已重启 systemd-resolved 服务"
+        fi
     fi
 
     # 重启网络

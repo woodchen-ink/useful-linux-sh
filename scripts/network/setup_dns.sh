@@ -212,23 +212,22 @@ configure_dns() {
         fi
     else
         # 创建新的 resolv.conf
-        cat > /etc/resolv.conf << RESOLV_CONF_EOF
+        cat > /etc/resolv.conf << 'RESOLV_CONF_EOF'
 # DNS配置 - 由setup_dns.sh脚本生成
 # 请勿手动修改此文件
-nameserver $PRIMARY_DNS
-nameserver $SECONDARY_DNS
 RESOLV_CONF_EOF
+
+        echo "nameserver $PRIMARY_DNS" >> /etc/resolv.conf
+        echo "nameserver $SECONDARY_DNS" >> /etc/resolv.conf
 
         # 如果用户选择配置IPv6,添加IPv6 DNS
         if [ "$CONFIGURE_IPV6" = "true" ]; then
-            cat >> /etc/resolv.conf << RESOLV_CONF_V6_EOF
-nameserver $PRIMARY_DNS_V6
-nameserver $SECONDARY_DNS_V6
-RESOLV_CONF_V6_EOF
+            echo "nameserver $PRIMARY_DNS_V6" >> /etc/resolv.conf
+            echo "nameserver $SECONDARY_DNS_V6" >> /etc/resolv.conf
         fi
 
         # 添加选项配置
-        cat >> /etc/resolv.conf << RESOLV_CONF_OPT_EOF
+        cat >> /etc/resolv.conf << 'RESOLV_CONF_OPT_EOF'
 
 # 选项配置
 options timeout:2
@@ -288,23 +287,22 @@ check_dns() {
         chattr -i /etc/resolv.conf 2>/dev/null
 
         # 恢复配置
-        cat > /etc/resolv.conf << DNS_RESTORE_EOF
+        cat > /etc/resolv.conf << 'DNS_RESTORE_EOF'
 # DNS配置 - 由setup_dns.sh脚本生成
 # 请勿手动修改此文件
-nameserver \$PRIMARY_DNS
-nameserver \$SECONDARY_DNS
 DNS_RESTORE_EOF
+
+        echo "nameserver \$PRIMARY_DNS" >> /etc/resolv.conf
+        echo "nameserver \$SECONDARY_DNS" >> /etc/resolv.conf
 
         # 如果用户选择配置IPv6,添加IPv6 DNS
         if [ "\$CONFIGURE_IPV6" = "true" ]; then
-            cat >> /etc/resolv.conf << DNS_RESTORE_V6_EOF
-nameserver \$PRIMARY_DNS_V6
-nameserver \$SECONDARY_DNS_V6
-DNS_RESTORE_V6_EOF
+            echo "nameserver \$PRIMARY_DNS_V6" >> /etc/resolv.conf
+            echo "nameserver \$SECONDARY_DNS_V6" >> /etc/resolv.conf
         fi
 
         # 添加选项配置
-        cat >> /etc/resolv.conf << DNS_RESTORE_OPT_EOF
+        cat >> /etc/resolv.conf << 'DNS_RESTORE_OPT_EOF'
 
 # 选项配置
 options timeout:2

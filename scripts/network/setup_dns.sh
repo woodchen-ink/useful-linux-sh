@@ -17,6 +17,8 @@ SECONDARY_DNS_V6="2606:4700:4700::1111"
 
 # 是否支持IPv6
 HAS_IPV6=false
+# 是否配置IPv6 DNS(用户选择)
+CONFIGURE_IPV6=false
 
 # 日志函数
 log_info() {
@@ -58,7 +60,7 @@ detect_os() {
     log_info "检测到操作系统: $OS $VERSION"
 }
 
-# 检测IPv6支持
+# 检测IPv6支持并询问用户
 detect_ipv6() {
     log_step "检测IPv6支持..."
 
@@ -72,8 +74,32 @@ detect_ipv6() {
         if [ -n "$ipv6_addr" ]; then
             log_info "IPv6地址: $ipv6_addr"
         fi
+
+        # 询问用户是否配置IPv6 DNS
+        echo ""
+        echo -e "${YELLOW}是否要配置IPv6 DNS服务器?${NC}"
+        echo "1) 配置IPv4和IPv6 DNS (推荐)"
+        echo "2) 仅配置IPv4 DNS"
+        read -p "请选择 (1-2) [默认: 1]: " ipv6_choice
+        ipv6_choice=${ipv6_choice:-1}
+
+        case $ipv6_choice in
+            1)
+                CONFIGURE_IPV6=true
+                log_info "将配置IPv4和IPv6 DNS服务器"
+                ;;
+            2)
+                CONFIGURE_IPV6=false
+                log_info "将仅配置IPv4 DNS服务器"
+                ;;
+            *)
+                CONFIGURE_IPV6=true
+                log_warn "无效选择，默认配置IPv4和IPv6 DNS"
+                ;;
+        esac
     else
         HAS_IPV6=false
+        CONFIGURE_IPV6=false
         log_warn "未检测到IPv6支持，将仅配置IPv4 DNS"
     fi
 }
@@ -120,7 +146,7 @@ configure_dns_services() {
 
                 # 构建DNS列表
                 local dns_list="$PRIMARY_DNS $SECONDARY_DNS"
-                if [ "$HAS_IPV6" = "true" ]; then
+                if [ "$CONFIGURE_IPV6" = "true" ]; then
                     dns_list="$dns_list $PRIMARY_DNS_V6 $SECONDARY_DNS_V6"
                 fi
 
@@ -180,7 +206,7 @@ configure_dns() {
         log_info "DNS通过 systemd-resolved 配置完成"
         log_info "  IPv4 主DNS: $PRIMARY_DNS (Google DNS)"
         log_info "  IPv4 备DNS: $SECONDARY_DNS (Cloudflare DNS)"
-        if [ "$HAS_IPV6" = "true" ]; then
+        if [ "$CONFIGURE_IPV6" = "true" ]; then
             log_info "  IPv6 主DNS: $PRIMARY_DNS_V6 (Google DNS)"
             log_info "  IPv6 备DNS: $SECONDARY_DNS_V6 (Cloudflare DNS)"
         fi
@@ -193,8 +219,8 @@ nameserver $PRIMARY_DNS
 nameserver $SECONDARY_DNS
 RESOLV_CONF_EOF
 
-        # 如果支持IPv6,添加IPv6 DNS
-        if [ "$HAS_IPV6" = "true" ]; then
+        # 如果用户选择配置IPv6,添加IPv6 DNS
+        if [ "$CONFIGURE_IPV6" = "true" ]; then
             cat >> /etc/resolv.conf << RESOLV_CONF_V6_EOF
 nameserver $PRIMARY_DNS_V6
 nameserver $SECONDARY_DNS_V6
@@ -214,7 +240,7 @@ RESOLV_CONF_OPT_EOF
         log_info "DNS服务器已设置为:"
         log_info "  IPv4 主DNS: $PRIMARY_DNS (Google DNS)"
         log_info "  IPv4 备DNS: $SECONDARY_DNS (Cloudflare DNS)"
-        if [ "$HAS_IPV6" = "true" ]; then
+        if [ "$CONFIGURE_IPV6" = "true" ]; then
             log_info "  IPv6 主DNS: $PRIMARY_DNS_V6 (Google DNS)"
             log_info "  IPv6 备DNS: $SECONDARY_DNS_V6 (Cloudflare DNS)"
         fi
@@ -240,8 +266,8 @@ lock_dns_config() {
         }
     fi
 
-    # 创建保护脚本
-    cat > /usr/local/bin/protect-dns.sh << 'PROTECT_SCRIPT_EOF'
+    # 创建保护脚本(需要传递IPv6配置)
+    cat > /usr/local/bin/protect-dns.sh << PROTECT_SCRIPT_EOF
 #!/bin/bash
 # DNS保护脚本
 PRIMARY_DNS="8.8.8.8"
@@ -249,15 +275,13 @@ SECONDARY_DNS="1.1.1.1"
 PRIMARY_DNS_V6="2001:4860:4860::8888"
 SECONDARY_DNS_V6="2606:4700:4700::1111"
 
-# 检测IPv6支持
-HAS_IPV6=false
-if ip -6 addr show scope global 2>/dev/null | grep -q "inet6"; then
-    HAS_IPV6=true
-fi
+# 用户配置的IPv6选项
+CONFIGURE_IPV6=$CONFIGURE_IPV6
+PROTECT_SCRIPT_EOF
 
 # 检查DNS配置是否被修改
 check_dns() {
-    if ! grep -q "$PRIMARY_DNS" /etc/resolv.conf || ! grep -q "$SECONDARY_DNS" /etc/resolv.conf; then
+    if ! grep -q "\$PRIMARY_DNS" /etc/resolv.conf || ! grep -q "\$SECONDARY_DNS" /etc/resolv.conf; then
         echo "检测到DNS配置被修改，正在恢复..."
 
         # 解除锁定
@@ -267,15 +291,15 @@ check_dns() {
         cat > /etc/resolv.conf << DNS_RESTORE_EOF
 # DNS配置 - 由setup_dns.sh脚本生成
 # 请勿手动修改此文件
-nameserver $PRIMARY_DNS
-nameserver $SECONDARY_DNS
+nameserver \$PRIMARY_DNS
+nameserver \$SECONDARY_DNS
 DNS_RESTORE_EOF
 
-        # 如果支持IPv6,添加IPv6 DNS
-        if [ "$HAS_IPV6" = "true" ]; then
+        # 如果用户选择配置IPv6,添加IPv6 DNS
+        if [ "\$CONFIGURE_IPV6" = "true" ]; then
             cat >> /etc/resolv.conf << DNS_RESTORE_V6_EOF
-nameserver $PRIMARY_DNS_V6
-nameserver $SECONDARY_DNS_V6
+nameserver \$PRIMARY_DNS_V6
+nameserver \$SECONDARY_DNS_V6
 DNS_RESTORE_V6_EOF
         fi
 
@@ -386,8 +410,8 @@ test_dns() {
         fi
     done
 
-    # 如果支持IPv6,测试IPv6解析
-    if [ "$HAS_IPV6" = "true" ]; then
+    # 如果用户选择配置IPv6,测试IPv6解析
+    if [ "$CONFIGURE_IPV6" = "true" ]; then
         log_info "测试IPv6 DNS解析..."
         local ipv6_success=0
 
@@ -428,7 +452,7 @@ show_config_info() {
     echo -e "  主DNS: ${BLUE}$PRIMARY_DNS${NC} (Google DNS)"
     echo -e "  备DNS: ${BLUE}$SECONDARY_DNS${NC} (Cloudflare DNS)"
 
-    if [ "$HAS_IPV6" = "true" ]; then
+    if [ "$CONFIGURE_IPV6" = "true" ]; then
         echo -e "${YELLOW}IPv6 DNS服务器:${NC}"
         echo -e "  主DNS: ${BLUE}$PRIMARY_DNS_V6${NC} (Google DNS)"
         echo -e "  备DNS: ${BLUE}$SECONDARY_DNS_V6${NC} (Cloudflare DNS)"

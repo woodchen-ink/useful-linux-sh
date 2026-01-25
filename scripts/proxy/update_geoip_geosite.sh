@@ -2,8 +2,6 @@
 
 # XrayR 路由规则文件更新脚本
 # 功能: 更新 geosite.dat 和 geoip.dat 规则文件
-# 作者: ULS
-# 版本: 1.0
 
 # 颜色定义
 RED='\033[0;31m'

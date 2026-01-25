@@ -513,6 +513,28 @@ main_loop() {
     done
 }
 
+# 检查版本更新（非阻塞式，仅提示）
+check_version_update() {
+    # 静默检查，不输出额外信息
+    local latest_version=$(get_latest_release 2>/dev/null)
+
+    # 如果无法获取版本信息，静默失败
+    if [ -z "$latest_version" ]; then
+        return 0
+    fi
+
+    # 使用语义化版本比对
+    if version_lt "$SCRIPT_VERSION" "$latest_version"; then
+        echo ""
+        echo -e "${YELLOW}╔══════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${YELLOW}║${NC}  🎉 发现新版本可用: ${BOLD}v$SCRIPT_VERSION${NC} → ${GREEN}${BOLD}v$latest_version${NC}               ${YELLOW}║${NC}"
+        echo -e "${YELLOW}║${NC}  💡 提示: 选择菜单选项 ${CYAN}${BOLD}15${NC} 即可更新到最新版本               ${YELLOW}║${NC}"
+        echo -e "${YELLOW}╚══════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+        sleep 2  # 给用户2秒时间阅读提示
+    fi
+}
+
 # 初始化函数
 initialize() {
     # 检查curl是否安装
@@ -537,6 +559,9 @@ initialize() {
             echo
         fi
     fi
+
+    # 启动时检查版本更新
+    check_version_update
 }
 
 # 主函数

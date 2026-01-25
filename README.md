@@ -28,6 +28,7 @@ curl -fsSL https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/h
 - 🎯 交互式菜单，操作简单直观
 - 📥 每次执行都下载最新脚本版本，确保功能最新
 - 🔄 基于GitHub Release的自动版本管理
+- 🔔 启动时自动检测新版本，智能提示更新
 - 🤖 GitHub Actions自动测试和发布
 - 🗑️ 完整卸载功能，干净移除所有文件
 - ⚡ 可选安装到系统路径，全局使用

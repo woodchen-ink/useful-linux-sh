@@ -26,12 +26,48 @@ check_root() {
     fi
 }
 
-check_and_install_ufw() {
+check_existing_ufw() {
     if command -v ufw >/dev/null 2>&1; then
-        echo_info "UFW已安装"
+        echo_info "检测到UFW已安装"
+
+        # 检查UFW服务状态
+        if systemctl is-active --quiet ufw 2>/dev/null || ufw status | grep -q "Status: active"; then
+            echo_warn "检测到UFW服务已运行"
+
+            # 备份当前规则
+            local backup_dir="/etc/ufw/backup"
+            local backup_file="$backup_dir/rules.backup.$(date +%Y%m%d_%H%M%S)"
+
+            mkdir -p "$backup_dir"
+            ufw status numbered > "$backup_file" 2>/dev/null || true
+            echo_info "已备份当前规则到: $backup_file"
+
+            # 询问用户是否继续
+            echo ""
+            echo_warn "继续执行将重置所有现有规则！"
+            echo "1) 重置并重新配置"
+            echo "2) 保留现有配置并退出"
+            read -p "请选择 [1-2]: " choice
+
+            case $choice in
+                1)
+                    echo_info "用户选择重置配置"
+                    return 0
+                    ;;
+                2)
+                    echo_info "保留现有配置，退出脚本"
+                    exit 0
+                    ;;
+                *)
+                    echo_error "无效选择，退出脚本"
+                    exit 1
+                    ;;
+            esac
+        fi
+        return 0
     else
         echo_info "UFW未安装，开始安装..."
-        
+
         if command -v apt >/dev/null 2>&1; then
             apt update
             apt install -y ufw
@@ -46,8 +82,9 @@ check_and_install_ufw() {
             echo_error "不支持的包管理器，请手动安装UFW"
             exit 1
         fi
-        
+
         echo_info "UFW安装完成"
+        return 0
     fi
 }
 
@@ -101,16 +138,17 @@ enable_ufw() {
 
 main() {
     echo_info "开始配置UFW防火墙..."
-    
+
     check_root
-    check_and_install_ufw
+    check_existing_ufw
     configure_default_ports
     ask_additional_ports
     enable_ufw
-    
+
     echo ""
     echo_info "UFW防火墙配置完成！"
     echo_info "当前防火墙规则已生效，SSH连接不会中断"
+    echo_info "如需恢复旧规则，请查看备份文件: /etc/ufw/backup/"
 }
 
 main "$@"

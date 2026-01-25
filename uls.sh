@@ -122,6 +122,9 @@ run_script() {
         "setup_warp.sh")
             download_script "$script_name" "scripts/network/setup_warp.sh" || return 1
             ;;
+        "update_geoip_geosite.sh")
+            download_script "$script_name" "scripts/proxy/update_geoip_geosite.sh" || return 1
+            ;;
         *)
             log_error "未知脚本: $script_name"
             return 1
@@ -159,10 +162,11 @@ show_menu() {
     echo -e "${WHITE}  ${BLUE}10.${NC} ${GREEN}☁️  WARP代理管理${NC}     - Cloudflare WARP代理"
     echo -e "${WHITE}  ${BLUE}11.${NC} ${GREEN}🐳 Docker Volumes迁移${NC} - 跨服务器迁移Docker卷"
     echo -e "${WHITE}  ${BLUE}12.${NC} ${GREEN}🚄 V2bX节点管理${NC}     - V2board节点服务端管理"
-    echo -e "${WHITE}  ${BLUE}13.${NC} ${GREEN}📊 服务器性能测试${NC}   - 综合性能和网络测试"
+    echo -e "${WHITE}  ${BLUE}13.${NC} ${GREEN}📦 GeoIP/GeoSite更新${NC} - 更新geoip和geosite规则"
+    echo -e "${WHITE}  ${BLUE}14.${NC} ${GREEN}📊 服务器性能测试${NC}   - 综合性能和网络测试"
     echo
-    echo -e "${WHITE}  ${PURPLE}14.${NC} ${CYAN}🔄 更新ULS脚本${NC}      - 更新本管理脚本"
-    echo -e "${WHITE}  ${PURPLE}15.${NC} ${CYAN}🗑️  卸载ULS脚本${NC}     - 卸载并清理所有文件"
+    echo -e "${WHITE}  ${PURPLE}15.${NC} ${CYAN}🔄 更新ULS脚本${NC}      - 更新本管理脚本"
+    echo -e "${WHITE}  ${PURPLE}16.${NC} ${CYAN}🗑️  卸载ULS脚本${NC}     - 卸载并清理所有文件"
     echo
     echo -e "${WHITE}  ${RED}0.${NC} ${RED}❌ 退出程序${NC}"
     echo
@@ -423,7 +427,7 @@ main_loop() {
     while true; do
         show_menu
 
-        read -p "请输入选项 (0-14): " choice
+        read -p "请输入选项 (0-16): " choice
 
         case $choice in
             1)
@@ -476,13 +480,17 @@ main_loop() {
                 ;;
             13)
                 echo
-                run_script "server_benchmark.sh"
+                run_script "update_geoip_geosite.sh"
                 ;;
             14)
                 echo
-                update_uls
+                run_script "server_benchmark.sh"
                 ;;
             15)
+                echo
+                update_uls
+                ;;
+            16)
                 echo
                 uninstall_uls
                 ;;

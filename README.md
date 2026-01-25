@@ -330,6 +330,63 @@ journalctl -u V2bX -f     # 查看实时日志
 - 建议在干净的系统上安装
 - 安装前请确保服务器时间正确
 
+#### 📦 GeoIP/GeoSite规则更新工具
+一键更新 XrayR 等代理软件的 geoip.dat 和 geosite.dat 路由规则文件,保持规则库最新。
+
+```bash
+wget -O update_geoip_geosite.sh https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/scripts/proxy/update_geoip_geosite.sh
+chmod +x update_geoip_geosite.sh
+sudo ./update_geoip_geosite.sh
+```
+
+**核心功能:**
+- 📥 **规则更新** - 从 Loyalsoldier/v2ray-rules-dat 下载最新规则
+  - geosite.dat：域名分类规则
+  - geoip.dat：IP 地址分类规则
+- 🔍 **文件检测** - 自动检测现有规则文件状态
+  - 显示文件大小和修改日期
+  - 提示是否需要备份
+- 💾 **备份管理**：
+  - 更新前可选择自动备份
+  - 支持从备份恢复
+  - 备份文件带时间戳
+- ✅ **完整性验证** - 下载后自动验证文件大小
+- 🔄 **服务管理** - 可选择自动重启 XrayR 使规则生效
+- 📊 **规则信息查看** - 查看当前规则文件详细信息
+
+**功能菜单:**
+1. 更新规则文件 (推荐) - 备份后更新
+2. 仅下载不备份 - 直接覆盖更新
+3. 查看规则文件信息 - 显示当前规则状态
+4. 恢复备份文件 - 从备份中恢复
+
+**使用场景:**
+- 定期更新代理规则保持最新
+- 路由规则失效时重新下载
+- 更新后规则有问题时恢复备份
+- 新安装 XrayR 后首次配置规则
+
+**配置文件位置:**
+- XrayR 配置目录：`/etc/XrayR/`
+- 规则文件：
+  - `/etc/XrayR/geosite.dat`
+  - `/etc/XrayR/geoip.dat`
+- 备份目录：`/etc/XrayR/backup/`
+
+**规则来源:**
+- 项目地址：https://github.com/Loyalsoldier/v2ray-rules-dat
+- 规则优势：
+  - 每日自动更新
+  - 包含广告拦截、隐私保护等规则
+  - 针对中国大陆优化
+  - 支持所有主流代理软件
+
+**适用软件:**
+- XrayR
+- Xray
+- V2Ray
+- 其他支持 geoip/geosite 的代理软件
+
 ### 📊 服务器性能测试脚本
 
 #### 📊 服务器性能测试工具

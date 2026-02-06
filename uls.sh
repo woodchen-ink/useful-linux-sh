@@ -165,8 +165,7 @@ show_menu() {
     echo -e "${WHITE}  ${BLUE}13.${NC} ${GREEN}📦 GeoIP/GeoSite更新${NC} - 更新geoip和geosite规则"
     echo -e "${WHITE}  ${BLUE}14.${NC} ${GREEN}📊 服务器性能测试${NC}   - 综合性能和网络测试"
     echo
-    echo -e "${WHITE}  ${PURPLE}15.${NC} ${CYAN}🔄 更新ULS脚本${NC}      - 更新本管理脚本"
-    echo -e "${WHITE}  ${PURPLE}16.${NC} ${CYAN}🗑️  卸载ULS脚本${NC}     - 卸载并清理所有文件"
+    echo -e "${WHITE}  ${PURPLE}15.${NC} ${CYAN}🗑️  卸载ULS脚本${NC}     - 卸载并清理所有文件"
     echo
     echo -e "${WHITE}  ${RED}0.${NC} ${RED}❌ 退出程序${NC}"
     echo
@@ -264,100 +263,6 @@ get_latest_release() {
     echo "$latest_version"
 }
 
-# 更新ULS脚本
-update_uls() {
-    log_info "正在检查ULS脚本更新..."
-
-    local latest_version=$(get_latest_release)
-    local temp_file="/tmp/uls_new.sh"
-
-    if [ -z "$latest_version" ]; then
-        log_error "无法获取最新版本信息"
-        return 1
-    fi
-
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${GREEN}当前版本:${NC} ${BOLD}v$SCRIPT_VERSION${NC}"
-    echo -e "${GREEN}最新版本:${NC} ${BOLD}v$latest_version${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-
-    # 使用语义化版本比对
-    if version_lt "$SCRIPT_VERSION" "$latest_version"; then
-        echo ""
-        log_info "🎉 发现新版本可用!"
-        echo ""
-
-        # 询问是否更新
-        read -p "是否立即更新? (Y/n): " update_choice
-        update_choice=${update_choice:-Y}  # 默认为Y
-
-        if [[ ! $update_choice =~ ^[Yy] ]]; then
-            log_info "已取消更新"
-            return 0
-        fi
-
-        echo ""
-        log_info "正在下载新版本..."
-
-        # 从GitHub Release下载，如果失败则从主分支下载
-        local download_success=false
-        local release_url="https://github.com/woodchen-ink/useful-linux-sh/releases/download/$latest_version/uls.sh"
-
-        if curl -fsSL "$release_url" -o "$temp_file" 2>/dev/null; then
-            download_success=true
-            log_info "✓ 从Release下载成功"
-        elif curl -fsSL "$SCRIPT_URL/uls.sh" -o "$temp_file" 2>/dev/null; then
-            download_success=true
-            log_info "✓ 从主分支下载成功"
-        fi
-
-        if [ "$download_success" = true ] && [ -f "$temp_file" ]; then
-            # 验证下载的文件
-            if bash -n "$temp_file" 2>/dev/null; then
-                # 备份当前版本
-                mkdir -p "$CONFIG_DIR/backup"
-                local backup_file="$CONFIG_DIR/backup/uls_${SCRIPT_VERSION}_$(date +%Y%m%d_%H%M%S).sh"
-                cp "$0" "$backup_file"
-                log_info "✓ 已备份当前版本到: $backup_file"
-
-                # 更新脚本
-                cp "$temp_file" "$0"
-                chmod +x "$0"
-
-                # 如果安装到系统目录，也更新那里的副本
-                if [ -f "$INSTALL_DIR/uls" ]; then
-                    cp "$temp_file" "$INSTALL_DIR/uls"
-                    chmod +x "$INSTALL_DIR/uls"
-                    log_info "✓ 已更新系统命令"
-                fi
-
-                rm -f "$temp_file"
-
-                # 清理旧备份
-                clean_old_backups
-
-                echo ""
-                log_success "🎊 ULS脚本已成功更新到版本 v$latest_version"
-                echo ""
-                log_info "重新启动脚本中..."
-                sleep 2
-                exec "$0"
-            else
-                log_error "下载的文件语法检查失败"
-                rm -f "$temp_file"
-                return 1
-            fi
-        else
-            log_error "下载更新文件失败"
-            return 1
-        fi
-    else
-        echo ""
-        log_success "✓ 当前已是最新版本"
-        echo ""
-    fi
-}
-
 # 安装ULS到系统
 install_uls() {
     log_info "将ULS安装到系统路径..."
@@ -427,7 +332,7 @@ main_loop() {
     while true; do
         show_menu
 
-        read -p "请输入选项 (0-16): " choice
+        read -p "请输入选项 (0-15): " choice
 
         case $choice in
             1)
@@ -488,10 +393,6 @@ main_loop() {
                 ;;
             15)
                 echo
-                update_uls
-                ;;
-            16)
-                echo
                 uninstall_uls
                 ;;
             0)
@@ -513,9 +414,10 @@ main_loop() {
     done
 }
 
-# 检查版本更新（非阻塞式，仅提示）
+# 启动时自动检查并更新版本
 check_version_update() {
-    # 静默检查，不输出额外信息
+    log_info "正在检查ULS版本更新..."
+
     local latest_version=$(get_latest_release 2>/dev/null)
 
     # 如果无法获取版本信息，静默失败
@@ -527,11 +429,55 @@ check_version_update() {
     if version_lt "$SCRIPT_VERSION" "$latest_version"; then
         echo ""
         echo -e "${YELLOW}╔══════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${YELLOW}║${NC}  🎉 发现新版本可用: ${BOLD}v$SCRIPT_VERSION${NC} → ${GREEN}${BOLD}v$latest_version${NC}               ${YELLOW}║${NC}"
-        echo -e "${YELLOW}║${NC}  💡 提示: 选择菜单选项 ${CYAN}${BOLD}15${NC} 即可更新到最新版本               ${YELLOW}║${NC}"
+        echo -e "${YELLOW}║${NC}  🎉 发现新版本: ${BOLD}v$SCRIPT_VERSION${NC} → ${GREEN}${BOLD}v$latest_version${NC}，正在自动更新...        ${YELLOW}║${NC}"
         echo -e "${YELLOW}╚══════════════════════════════════════════════════════════════╝${NC}"
         echo ""
-        sleep 2  # 给用户2秒时间阅读提示
+
+        local temp_file="/tmp/uls_new.sh"
+        local download_success=false
+        local release_url="https://github.com/woodchen-ink/useful-linux-sh/releases/download/$latest_version/uls.sh"
+
+        # 从GitHub Release下载，如果失败则从主分支下载
+        if curl -fsSL "$release_url" -o "$temp_file" 2>/dev/null; then
+            download_success=true
+        elif curl -fsSL "$SCRIPT_URL/uls.sh" -o "$temp_file" 2>/dev/null; then
+            download_success=true
+        fi
+
+        if [ "$download_success" = true ] && [ -f "$temp_file" ]; then
+            # 验证下载的文件语法
+            if bash -n "$temp_file" 2>/dev/null; then
+                # 备份当前版本
+                mkdir -p "$CONFIG_DIR/backup"
+                local backup_file="$CONFIG_DIR/backup/uls_${SCRIPT_VERSION}_$(date +%Y%m%d_%H%M%S).sh"
+                cp "$0" "$backup_file"
+
+                # 更新脚本
+                cp "$temp_file" "$0"
+                chmod +x "$0"
+
+                # 如果安装到系统目录，也更新那里的副本
+                if [ -f "$INSTALL_DIR/uls" ]; then
+                    cp "$temp_file" "$INSTALL_DIR/uls"
+                    chmod +x "$INSTALL_DIR/uls"
+                fi
+
+                rm -f "$temp_file"
+
+                # 清理旧备份
+                clean_old_backups
+
+                log_success "已自动更新到 v$latest_version，正在重新启动..."
+                sleep 1
+                exec "$0"
+            else
+                log_warn "下载的文件语法检查失败，跳过自动更新"
+                rm -f "$temp_file"
+            fi
+        else
+            log_warn "下载更新失败，跳过自动更新"
+            rm -f "$temp_file"
+        fi
     fi
 }
 

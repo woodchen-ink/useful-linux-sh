@@ -117,11 +117,12 @@ change_socket_port() {
     local new_port="$1"
 
     mkdir -p "$SOCKET_OVERRIDE_DIR"
-    # ListenStream= 空行用于清除默认值，再设置新端口
+    # ListenStream= 空行用于清除默认值，再分别绑定 IPv4 和 IPv6
     cat > "$SOCKET_OVERRIDE_DIR/port.conf" <<SOCKET_EOF
 [Socket]
 ListenStream=
-ListenStream=$new_port
+ListenStream=0.0.0.0:$new_port
+ListenStream=[::]:$new_port
 SOCKET_EOF
 
     echo_info "已创建 systemd socket 覆盖配置: $SOCKET_OVERRIDE_DIR/port.conf"

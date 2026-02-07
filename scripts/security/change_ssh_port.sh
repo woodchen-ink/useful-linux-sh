@@ -8,6 +8,7 @@ YELLOW='\033[1;33m'
 NC='\033[0m'
 
 SSHD_CONFIG="/etc/ssh/sshd_config"
+SOCKET_OVERRIDE_DIR=""
 
 echo_info() {
     echo -e "${GREEN}[INFO]${NC} $1"
@@ -100,6 +101,34 @@ change_port() {
     fi
 }
 
+# 检测是否使用 systemd socket activation
+is_socket_activated() {
+    if systemctl is-enabled ssh.socket 2>/dev/null | grep -q "enabled"; then
+        SOCKET_OVERRIDE_DIR="/etc/systemd/system/ssh.socket.d"
+        return 0
+    elif systemctl is-enabled sshd.socket 2>/dev/null | grep -q "enabled"; then
+        SOCKET_OVERRIDE_DIR="/etc/systemd/system/sshd.socket.d"
+        return 0
+    fi
+    return 1
+}
+
+# 修改 systemd socket 监听端口
+change_socket_port() {
+    local new_port="$1"
+
+    mkdir -p "$SOCKET_OVERRIDE_DIR"
+    # ListenStream= 空行用于清除默认值，再设置新端口
+    cat > "$SOCKET_OVERRIDE_DIR/port.conf" <<SOCKET_EOF
+[Socket]
+ListenStream=
+ListenStream=$new_port
+SOCKET_EOF
+
+    echo_info "已创建 systemd socket 覆盖配置: $SOCKET_OVERRIDE_DIR/port.conf"
+    systemctl daemon-reload
+}
+
 # 处理SELinux
 handle_selinux() {
     local port="$1"
@@ -174,11 +203,21 @@ verify_config() {
 # 重启SSH服务
 restart_sshd() {
     echo_info "正在重启SSH服务..."
-    if systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null; then
-        echo_info "SSH服务已重启"
+    if is_socket_activated; then
+        # socket activation 模式：重启 socket 单元
+        if systemctl restart ssh.socket 2>/dev/null || systemctl restart sshd.socket 2>/dev/null; then
+            echo_info "SSH socket 已重启"
+        else
+            echo_error "SSH socket 重启失败"
+            return 1
+        fi
     else
-        echo_error "SSH服务重启失败"
-        return 1
+        if systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null; then
+            echo_info "SSH服务已重启"
+        else
+            echo_error "SSH服务重启失败"
+            return 1
+        fi
     fi
 }
 
@@ -191,6 +230,11 @@ show_status() {
     echo "  SSH 端口管理"
     echo "════════════════════════════════════"
     echo -e "  当前SSH端口: ${GREEN}$current_port${NC}"
+    if is_socket_activated; then
+        echo -e "  监听模式:   ${YELLOW}systemd socket activation${NC}"
+    else
+        echo -e "  监听模式:   sshd 服务直接监听"
+    fi
     echo "────────────────────────────────────"
 }
 
@@ -255,6 +299,12 @@ main() {
     echo ""
     backup_config
     change_port "$new_port"
+
+    # 处理 systemd socket activation
+    if is_socket_activated; then
+        echo_info "检测到 systemd socket activation，同步修改 socket 配置..."
+        change_socket_port "$new_port"
+    fi
 
     # 验证配置
     if ! verify_config; then

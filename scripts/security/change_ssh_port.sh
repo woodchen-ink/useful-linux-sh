@@ -188,6 +188,28 @@ handle_firewall() {
     fi
 }
 
+# 同步修改 fail2ban 的 sshd jail 端口
+handle_fail2ban() {
+    local new_port="$1"
+    local jail_local="/etc/fail2ban/jail.local"
+
+    if ! command -v fail2ban-server >/dev/null 2>&1; then
+        return
+    fi
+
+    if [[ ! -f "$jail_local" ]]; then
+        return
+    fi
+
+    # 检查 jail.local 中是否有 sshd 段的 port 配置
+    if grep -qE '^[[:space:]]*port[[:space:]]*=' "$jail_local"; then
+        echo_info "检测到 Fail2ban，正在同步 SSH 端口..."
+        sed -i -E "s/^([[:space:]]*port[[:space:]]*=).*/\1 $new_port/" "$jail_local"
+        systemctl restart fail2ban 2>/dev/null || true
+        echo_info "Fail2ban 已更新端口为 $new_port 并重启"
+    fi
+}
+
 # 验证sshd配置
 verify_config() {
     echo_info "验证SSH配置语法..."
@@ -328,9 +350,10 @@ main() {
         exit 1
     fi
 
-    # 处理SELinux和防火墙
+    # 处理SELinux、防火墙和Fail2ban
     handle_selinux "$new_port"
     handle_firewall "$new_port"
+    handle_fail2ban "$new_port"
 
     # 重启SSH
     restart_sshd

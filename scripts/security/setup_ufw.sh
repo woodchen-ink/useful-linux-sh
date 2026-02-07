@@ -72,22 +72,67 @@ list_rules() {
 delete_port_rule() {
     list_rules
     echo ""
-    echo "请输入要删除的规则编号 (如: 3)"
-    echo "提示: 每次只能删除一条，删除后编号会变化"
-    read -p "规则编号: " rule_num
+    echo "删除方式:"
+    echo "  1) 按端口号删除 (删除该端口所有规则)"
+    echo "  2) 按规则编号删除"
+    read -p "请选择 [1-2]: " del_method
 
-    if [[ ! "$rule_num" =~ ^[0-9]+$ ]]; then
-        echo_warn "无效编号"
-        return
-    fi
+    case "$del_method" in
+        1)
+            read -p "请输入要删除的端口号: " port
+            if ! validate_port "$port"; then
+                echo_warn "无效端口: $port"
+                return
+            fi
 
-    echo_warn "即将删除规则 #$rule_num"
-    read -p "确认删除? [y/N]: " confirm
-    if [[ "$confirm" =~ ^[yY]$ ]]; then
-        yes | ufw delete "$rule_num" && echo_info "规则已删除" || echo_error "删除失败"
-    else
-        echo_info "已取消"
-    fi
+            # 查找该端口相关的规则
+            local rules
+            rules=$(ufw status numbered 2>/dev/null | grep -E "\s$port(/tcp|/udp|\s)" || true)
+
+            if [[ -z "$rules" ]]; then
+                echo_warn "未找到端口 $port 的相关规则"
+                return
+            fi
+
+            echo ""
+            echo_info "找到以下端口 $port 的规则:"
+            echo "$rules"
+            echo ""
+            read -p "确认删除以上所有规则? [y/N]: " confirm
+            if [[ "$confirm" =~ ^[yY]$ ]]; then
+                # 从大编号到小编号删除，避免编号变化问题
+                local rule_nums
+                rule_nums=$(echo "$rules" | grep -oP '^\[\s*\K[0-9]+' | sort -rn)
+                for num in $rule_nums; do
+                    yes | ufw delete "$num" && echo_info "已删除规则 #$num" || echo_error "删除规则 #$num 失败"
+                done
+                echo_info "端口 $port 的规则已全部删除"
+            else
+                echo_info "已取消"
+            fi
+            ;;
+        2)
+            echo "请输入要删除的规则编号 (如: 3)"
+            echo "提示: 每次只能删除一条，删除后编号会变化"
+            read -p "规则编号: " rule_num
+
+            if [[ ! "$rule_num" =~ ^[0-9]+$ ]]; then
+                echo_warn "无效编号"
+                return
+            fi
+
+            echo_warn "即将删除规则 #$rule_num"
+            read -p "确认删除? [y/N]: " confirm
+            if [[ "$confirm" =~ ^[yY]$ ]]; then
+                yes | ufw delete "$rule_num" && echo_info "规则已删除" || echo_error "删除失败"
+            else
+                echo_info "已取消"
+            fi
+            ;;
+        *)
+            echo_warn "无效选择"
+            ;;
+    esac
 }
 
 manage_menu() {

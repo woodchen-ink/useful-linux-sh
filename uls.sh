@@ -125,6 +125,9 @@ run_script() {
         "update_geoip_geosite.sh")
             download_script "$script_name" "scripts/proxy/update_geoip_geosite.sh" || return 1
             ;;
+        "change_ssh_port.sh")
+            download_script "$script_name" "scripts/security/change_ssh_port.sh" || return 1
+            ;;
         *)
             log_error "未知脚本: $script_name"
             return 1
@@ -164,8 +167,9 @@ show_menu() {
     echo -e "${WHITE}  ${BLUE}12.${NC} ${GREEN}🚄 V2bX节点管理${NC}     - V2board节点服务端管理"
     echo -e "${WHITE}  ${BLUE}13.${NC} ${GREEN}📦 GeoIP/GeoSite更新${NC} - 更新geoip和geosite规则"
     echo -e "${WHITE}  ${BLUE}14.${NC} ${GREEN}📊 服务器性能测试${NC}   - 综合性能和网络测试"
+    echo -e "${WHITE}  ${BLUE}15.${NC} ${GREEN}🔑 SSH端口修改${NC}      - 修改SSH服务监听端口"
     echo
-    echo -e "${WHITE}  ${PURPLE}15.${NC} ${CYAN}🗑️  卸载ULS脚本${NC}     - 卸载并清理所有文件"
+    echo -e "${WHITE}  ${PURPLE}16.${NC} ${CYAN}🗑️  卸载ULS脚本${NC}     - 卸载并清理所有文件"
     echo
     echo -e "${WHITE}  ${RED}0.${NC} ${RED}❌ 退出程序${NC}"
     echo
@@ -332,7 +336,7 @@ main_loop() {
     while true; do
         show_menu
 
-        read -p "请输入选项 (0-15): " choice
+        read -p "请输入选项 (0-16): " choice
 
         case $choice in
             1)
@@ -392,6 +396,10 @@ main_loop() {
                 run_script "server_benchmark.sh"
                 ;;
             15)
+                echo
+                run_script "change_ssh_port.sh"
+                ;;
+            16)
                 echo
                 uninstall_uls
                 ;;

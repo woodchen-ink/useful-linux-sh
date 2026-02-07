@@ -53,14 +53,19 @@ install_ufw() {
 }
 
 is_ufw_active() {
-    systemctl is-active --quiet ufw 2>/dev/null || ufw status 2>/dev/null | grep -q "Status: active"
+    ufw status 2>/dev/null | grep -q "Status: active"
 }
 
 list_rules() {
     echo ""
     echo_info "当前UFW规则:"
     echo "─────────────────────────────────────────"
-    ufw status numbered
+    if ufw status 2>/dev/null | grep -q "Status: active"; then
+        ufw status numbered
+    else
+        echo_warn "UFW当前未激活，以下为已添加的规则:"
+        ufw show added
+    fi
     echo "─────────────────────────────────────────"
 }
 

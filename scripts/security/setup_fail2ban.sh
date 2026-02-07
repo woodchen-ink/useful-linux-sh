@@ -133,7 +133,7 @@ change_port() {
     echo_info "当前SSH实际端口: $ssh_port"
 
     echo ""
-    echo "选择操作:"
+    echo "选择操作(更新端口并重启会比较久, 请耐心等待):"
     echo "  1) 自动同步为当前SSH端口 ($ssh_port)"
     echo "  2) 手动输入端口"
     read -p "请选择 [1-2]: " port_choice

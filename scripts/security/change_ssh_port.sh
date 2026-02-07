@@ -203,7 +203,7 @@ handle_fail2ban() {
 
     # 检查 jail.local 中是否有 sshd 段的 port 配置
     if grep -qE '^[[:space:]]*port[[:space:]]*=' "$jail_local"; then
-        echo_info "检测到 Fail2ban，正在同步 SSH 端口..."
+        echo_info "检测到 Fail2ban，正在同步 SSH 端口(此操作耗时较久, 请耐心等待)..."
         sed -i -E "s/^([[:space:]]*port[[:space:]]*=).*/\1 $new_port/" "$jail_local"
         systemctl restart fail2ban 2>/dev/null || true
         echo_info "Fail2ban 已更新端口为 $new_port 并重启"
@@ -320,7 +320,7 @@ main() {
     echo "  3. 放行防火墙端口 (如适用)"
     echo "  4. 验证配置并重启SSH服务"
     echo ""
-    echo_warn "请确保你有其他方式访问服务器 (如VNC/控制台)，以防SSH连接中断！"
+    echo_warn "请确保你有其他方式访问服务器 (如VNC/控制台)，以防SSH连接中断！修改后, 请先不要关闭本窗口, 尝试使用新端口连接ssh, 没问题再关闭本窗口(有时新端口生效需要时间, 可稍等会儿再试)"
     read -p "确认修改? [y/N]: " confirm
     if [[ ! "$confirm" =~ ^[yY]$ ]]; then
         echo_info "已取消"
@@ -377,8 +377,8 @@ main() {
         echo_warn "请检查: ss -tlnp | grep $new_port"
         echo_warn "或查看日志: journalctl -u ssh --no-pager -n 20"
     fi
-    echo_warn "请使用新端口测试连接: ssh -p $new_port user@host"
-    echo_warn "确认新端口可用后，建议在防火墙中移除旧端口 $current_port 的放行规则"
+    echo_warn "请先不要关闭本窗口, 使用新端口测试连接: ssh -p $new_port user@host"
+    echo_warn "确认新端口可用后，可关闭本窗口, 并且建议在防火墙中移除旧端口 $current_port 的放行规则"
 }
 
 main "$@"

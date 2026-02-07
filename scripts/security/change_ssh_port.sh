@@ -32,7 +32,7 @@ check_root() {
 get_current_port() {
     local port
     # 优先读取未注释的 Port 行
-    port=$(grep -E '^\s*Port\s+' "$SSHD_CONFIG" 2>/dev/null | awk '{print $2}' | head -n1)
+    port=$(grep -E '^[[:space:]]*Port[[:space:]]+' "$SSHD_CONFIG" 2>/dev/null | awk '{print $2}' | head -n1)
     if [[ -z "$port" ]]; then
         port=22
     fi
@@ -88,12 +88,12 @@ backup_config() {
 change_port() {
     local new_port="$1"
 
-    if grep -qE '^\s*Port\s+' "$SSHD_CONFIG"; then
+    if grep -qE '^[[:space:]]*Port[[:space:]]+' "$SSHD_CONFIG"; then
         # 替换已有的 Port 行
-        sed -i "s/^\s*Port\s\+.*/Port $new_port/" "$SSHD_CONFIG"
-    elif grep -qE '^\s*#\s*Port\s+' "$SSHD_CONFIG"; then
+        sed -i -E "s/^[[:space:]]*Port[[:space:]]+.*/Port $new_port/" "$SSHD_CONFIG"
+    elif grep -qE '^[[:space:]]*#[[:space:]]*Port[[:space:]]+' "$SSHD_CONFIG"; then
         # 取消注释并修改
-        sed -i "s/^\s*#\s*Port\s\+.*/Port $new_port/" "$SSHD_CONFIG"
+        sed -i -E "s/^[[:space:]]*#[[:space:]]*Port[[:space:]]+.*/Port $new_port/" "$SSHD_CONFIG"
     else
         # 添加 Port 配置
         echo "Port $new_port" >> "$SSHD_CONFIG"

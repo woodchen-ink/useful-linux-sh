@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # ULS - Useful Linux Scripts 统一管理脚本
-# 版本: 1.70
+# 版本: 1.71
 # 作者: woodchen-ink
 
 # 配置信息
-SCRIPT_VERSION="1.70"
+SCRIPT_VERSION="1.71"
 SCRIPT_NAME="uls.sh"
 SCRIPT_URL="https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main"
 INSTALL_DIR="/usr/local/bin"

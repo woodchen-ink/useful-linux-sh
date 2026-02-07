@@ -1,6 +1,5 @@
 #!/bin/bash
 
-set -e
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -191,11 +190,11 @@ handle_firewall() {
 # 验证sshd配置
 verify_config() {
     echo_info "验证SSH配置语法..."
-    if sshd -t 2>/dev/null; then
+    if sshd -t; then
         echo_info "配置语法验证通过"
         return 0
     else
-        echo_error "配置语法验证失败！"
+        echo_error "配置语法验证失败！请查看上方错误信息"
         return 1
     fi
 }
@@ -204,11 +203,21 @@ verify_config() {
 restart_sshd() {
     echo_info "正在重启SSH服务..."
     if is_socket_activated; then
-        # socket activation 模式：重启 socket 单元
-        if systemctl restart ssh.socket 2>/dev/null || systemctl restart sshd.socket 2>/dev/null; then
-            echo_info "SSH socket 已重启"
+        # socket activation 模式：需要同时重启 socket 和 service
+        local socket_name=""
+        if systemctl is-enabled ssh.socket 2>/dev/null | grep -q "enabled"; then
+            socket_name="ssh"
+        elif systemctl is-enabled sshd.socket 2>/dev/null | grep -q "enabled"; then
+            socket_name="sshd"
+        fi
+
+        if [[ -n "$socket_name" ]]; then
+            systemctl stop "${socket_name}.socket" 2>/dev/null || true
+            systemctl stop "${socket_name}.service" 2>/dev/null || true
+            systemctl start "${socket_name}.socket"
+            echo_info "SSH socket (${socket_name}.socket) 已重启"
         else
-            echo_error "SSH socket 重启失败"
+            echo_error "无法确定 socket 单元名称"
             return 1
         fi
     else
@@ -325,8 +334,25 @@ main() {
     # 重启SSH
     restart_sshd
 
+    # 等待服务启动，验证端口是否在监听
+    echo_info "等待服务启动..."
+    sleep 2
+
+    local listening=false
+    if command -v ss >/dev/null 2>&1; then
+        if ss -tlnp 2>/dev/null | grep -q ":${new_port}\b"; then
+            listening=true
+        fi
+    fi
+
     echo ""
-    echo_info "SSH端口已成功修改为: $new_port"
+    if [[ "$listening" == "true" ]]; then
+        echo_info "SSH端口已成功修改为: $new_port (已确认监听中)"
+    else
+        echo_warn "SSH端口已修改为: $new_port，但未检测到监听"
+        echo_warn "请检查: ss -tlnp | grep $new_port"
+        echo_warn "或查看日志: journalctl -u ssh --no-pager -n 20"
+    fi
     echo_warn "请使用新端口测试连接: ssh -p $new_port user@host"
     echo_warn "确认新端口可用后，建议在防火墙中移除旧端口 $current_port 的放行规则"
 }

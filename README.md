@@ -55,6 +55,29 @@ sudo ./add-swap.sh
 bash <(curl -s https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/scripts/system/enable_bbr.sh)
 ```
 
+#### ⚡ 系统参数优化脚本
+优化 sysctl 内核网络参数，包括 TCP 缓冲区增大、TCP Fast Open、连接队列优化等。先检测当前配置状态，再由用户决定是否应用优化。适用于所有类型服务器（建站、代理等）。
+
+```bash
+wget -O optimize_sysctl.sh https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/scripts/system/optimize_sysctl.sh
+chmod +x optimize_sysctl.sh
+sudo ./optimize_sysctl.sh
+```
+
+**优化项目：**
+- 📈 **TCP 缓冲区** - 增大收发缓冲区至 16MB，提升吞吐量
+- ⚡ **TCP Fast Open** - 客户端+服务端同时启用，减少连接延迟
+- 🔗 **连接队列优化** - 增大 somaxconn、backlog 等队列上限
+- ⏱️ **超时优化** - 缩短 FIN_WAIT/Keepalive 超时，加速连接回收
+- 🛡️ **SYN Cookie 防护** - 防止 SYN Flood 攻击
+- 🚀 **BBR + fq** - 配合 BBR 拥塞控制的最佳队列调度
+- 📁 **文件描述符** - 提升系统最大文件描述符数
+
+**使用特点：**
+- 先检测、后操作，展示当前值与推荐值对比
+- 优化参数写入独立配置文件 `/etc/sysctl.d/99-uls-optimize.conf`，不污染原 sysctl.conf
+- 自动备份原始配置，支持一键还原
+
 ### 🔒 安全防护脚本
 
 #### 🛡️ UFW防火墙配置脚本

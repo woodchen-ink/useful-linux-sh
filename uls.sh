@@ -128,6 +128,9 @@ run_script() {
         "change_ssh_port.sh")
             download_script "$script_name" "scripts/security/change_ssh_port.sh" || return 1
             ;;
+        "optimize_sysctl.sh")
+            download_script "$script_name" "scripts/system/optimize_sysctl.sh" || return 1
+            ;;
         *)
             log_error "未知脚本: $script_name"
             return 1
@@ -168,8 +171,9 @@ show_menu() {
     echo -e "${WHITE}  ${BLUE}13.${NC} ${GREEN}📦 GeoIP/GeoSite更新${NC} - 更新geoip和geosite规则"
     echo -e "${WHITE}  ${BLUE}14.${NC} ${GREEN}📊 服务器性能测试${NC}   - 综合性能和网络测试"
     echo -e "${WHITE}  ${BLUE}15.${NC} ${GREEN}🔑 SSH端口修改${NC}      - 修改SSH服务监听端口"
+    echo -e "${WHITE}  ${BLUE}16.${NC} ${GREEN}⚡ 系统参数优化${NC}     - 优化sysctl内核网络参数"
     echo
-    echo -e "${WHITE}  ${PURPLE}16.${NC} ${CYAN}🗑️  卸载ULS脚本${NC}     - 卸载并清理所有文件"
+    echo -e "${WHITE}  ${PURPLE}17.${NC} ${CYAN}🗑️  卸载ULS脚本${NC}     - 卸载并清理所有文件"
     echo
     echo -e "${WHITE}  ${RED}0.${NC} ${RED}❌ 退出程序${NC}"
     echo
@@ -336,7 +340,7 @@ main_loop() {
     while true; do
         show_menu
 
-        read -p "请输入选项 (0-16): " choice
+        read -p "请输入选项 (0-17): " choice
 
         case $choice in
             1)
@@ -400,6 +404,10 @@ main_loop() {
                 run_script "change_ssh_port.sh"
                 ;;
             16)
+                echo
+                run_script "optimize_sysctl.sh"
+                ;;
+            17)
                 echo
                 uninstall_uls
                 ;;

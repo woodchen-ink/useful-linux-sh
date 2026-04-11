@@ -160,8 +160,9 @@ echo
 echo -e "${YELLOW}注意事项:${NC}"
 echo -e "  - 修改前会自动备份原始 /etc/sysctl.conf"
 echo -e "  - 优化参数写入 /etc/sysctl.d/99z-uls-optimize.conf (不污染原配置)"
+echo -e "  - 若 /etc/sysctl.conf 中有冲突参数，会自动注释掉避免覆盖"
 echo -e "  - 重启后参数依然生效"
-echo -e "  - 可随时通过删除配置文件还原"
+echo -e "  - 可随时通过删除配置文件并恢复备份还原"
 echo
 
 read -p "是否执行优化? (y/N): " confirm
@@ -206,6 +207,25 @@ for param_entry in "${NEED_OPTIMIZE[@]}"; do
 done
 
 log_info "优化配置已写入 ${CONF_FILE}"
+
+# 检查 /etc/sysctl.conf 是否存在冲突参数，若有则注释掉
+# 原因：/etc/sysctl.d/99-sysctl.conf 通常是 /etc/sysctl.conf 的软链接，
+# 按字母序排在 99z 之后（99- < 99z），会覆盖我们的配置
+SYSCTL_CONF="/etc/sysctl.conf"
+CONFLICT_FOUND=0
+for param_entry in "${NEED_OPTIMIZE[@]}"; do
+    local_kv="${param_entry%%|*}"
+    local_key="${local_kv%%=*}"
+    # 去除 key 前后空格
+    local_key_trimmed="${local_key// /}"
+    if grep -qE "^[[:space:]]*${local_key_trimmed}[[:space:]]*=" "$SYSCTL_CONF" 2>/dev/null; then
+        sed -i "s|^\([[:space:]]*${local_key_trimmed}[[:space:]]*=.*\)|# [ULS已注释，见99z-uls-optimize.conf] \1|" "$SYSCTL_CONF"
+        CONFLICT_FOUND=$((CONFLICT_FOUND + 1))
+    fi
+done
+if [ $CONFLICT_FOUND -gt 0 ]; then
+    log_info "已将 /etc/sysctl.conf 中 ${CONFLICT_FOUND} 个冲突参数注释掉（避免覆盖优化配置）"
+fi
 
 # 应用配置
 log_info "正在应用配置..."
@@ -252,5 +272,5 @@ fi
 
 echo
 echo -e "${CYAN}还原方法:${NC}"
-echo -e "  sudo rm ${CONF_FILE} && sudo sysctl --system"
+echo -e "  sudo rm ${CONF_FILE} && sudo cp ${BACKUP_FILE} /etc/sysctl.conf && sudo sysctl --system"
 echo

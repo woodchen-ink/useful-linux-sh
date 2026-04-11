@@ -159,7 +159,7 @@ done
 echo
 echo -e "${YELLOW}注意事项:${NC}"
 echo -e "  - 修改前会自动备份原始 /etc/sysctl.conf"
-echo -e "  - 优化参数写入 /etc/sysctl.d/99-uls-optimize.conf (不污染原配置)"
+echo -e "  - 优化参数写入 /etc/sysctl.d/99z-uls-optimize.conf (不污染原配置)"
 echo -e "  - 重启后参数依然生效"
 echo -e "  - 可随时通过删除配置文件还原"
 echo
@@ -184,7 +184,7 @@ cp /etc/sysctl.conf "$BACKUP_FILE"
 log_info "已备份原始配置到 ${BACKUP_FILE}"
 
 # 写入优化参数到独立配置文件
-CONF_FILE="/etc/sysctl.d/99-uls-optimize.conf"
+CONF_FILE="/etc/sysctl.d/99z-uls-optimize.conf"
 
 {
     echo "# ULS Sysctl 系统参数优化配置"

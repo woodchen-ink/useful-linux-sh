@@ -35,7 +35,7 @@ print_separator() {
 # 获取当前参数值（如果存在）
 get_current_value() {
     local key="$1"
-    sysctl -n "$key" 2>/dev/null || echo "(未设置)"
+    sysctl -n "$key" 2>/dev/null | tr -s ' \t' ' ' | sed 's/^ //;s/ $//' || echo "(未设置)"
 }
 
 # ============================================================

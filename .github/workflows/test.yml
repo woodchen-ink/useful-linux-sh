@@ -91,7 +91,7 @@ jobs:
           "scripts/network/setup_dns.sh"
         )
 
-        base_url="https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main"
+        base_url="https://i.czl.net/useful-linux-sh"
 
         for script in "${scripts[@]}"; do
           url="$base_url/$script"

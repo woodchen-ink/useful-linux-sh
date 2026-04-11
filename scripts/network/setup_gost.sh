@@ -90,7 +90,7 @@ install_gost() {
     log_info "检测到系统架构: $arch"
 
     # 下载链接
-    local download_url="https://github.com/ginuerzh/gost/releases/download/v${GOST_VERSION}/gost_${GOST_VERSION}_linux_${arch}.tar.gz"
+    local download_url="https://i.czl.net/gost-releases-download/v${GOST_VERSION}/gost_${GOST_VERSION}_linux_${arch}.tar.gz"
     local temp_dir=$(mktemp -d)
     local temp_file="${temp_dir}/gost.tar.gz"
 

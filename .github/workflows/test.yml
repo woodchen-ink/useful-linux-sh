@@ -91,7 +91,7 @@ jobs:
           "scripts/network/setup_dns.sh"
         )
 
-        base_url="https://i.czl.net/useful-linux-sh"
+        base_url="https://i.czl.net/uls"
 
         for script in "${scripts[@]}"; do
           url="$base_url/$script"

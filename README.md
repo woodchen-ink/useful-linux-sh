@@ -12,7 +12,7 @@
 
 **使用短链接+优化代理**
 ```bash
-curl -fsSL https://i.czl.net/useful-linux-sh/uls.sh -o uls.sh && chmod +x uls.sh && sudo ./uls.sh
+curl -fsSL https://i.czl.net/uls/uls.sh -o uls.sh && chmod +x uls.sh && sudo ./uls.sh
 ```
 
 
@@ -43,7 +43,7 @@ curl -fsSL https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/h
 一键添加swap空间的交互式脚本，会先显示当前swap状态，支持自定义swap大小。
 
 ```bash
-wget -O add-swap.sh https://i.czl.net/useful-linux-sh/scripts/system/add-swap.sh
+wget -O add-swap.sh https://i.czl.net/uls/scripts/system/add-swap.sh
 chmod +x add-swap.sh
 sudo ./add-swap.sh
 ```
@@ -52,14 +52,14 @@ sudo ./add-swap.sh
 检查内核版本并启用BBR TCP拥塞控制算法，显著提升网络传输性能。
 
 ```bash
-bash <(curl -s https://i.czl.net/useful-linux-sh/scripts/system/enable_bbr.sh)
+bash <(curl -s https://i.czl.net/uls/scripts/system/enable_bbr.sh)
 ```
 
 #### ⚡ 系统参数优化脚本
 优化 sysctl 内核网络参数，包括 TCP 缓冲区增大、TCP Fast Open、连接队列优化等。先检测当前配置状态，再由用户决定是否应用优化。适用于所有类型服务器（建站、代理等）。
 
 ```bash
-wget -O optimize_sysctl.sh https://i.czl.net/useful-linux-sh/scripts/system/optimize_sysctl.sh
+wget -O optimize_sysctl.sh https://i.czl.net/uls/scripts/system/optimize_sysctl.sh
 chmod +x optimize_sysctl.sh
 sudo ./optimize_sysctl.sh
 ```
@@ -84,7 +84,7 @@ sudo ./optimize_sysctl.sh
 自动检测并安装UFW防火墙，配置常用端口(22,80,443)，支持自定义端口设置，启用防火墙并设置开机自启。
 
 ```bash
-wget -O setup_ufw.sh https://i.czl.net/useful-linux-sh/scripts/security/setup_ufw.sh
+wget -O setup_ufw.sh https://i.czl.net/uls/scripts/security/setup_ufw.sh
 chmod +x setup_ufw.sh
 sudo ./setup_ufw.sh
 ```
@@ -93,7 +93,7 @@ sudo ./setup_ufw.sh
 自动安装配置Fail2ban入侵检测系统，配置SSH永久封禁模式，与UFW防火墙深度集成。
 
 ```bash
-wget -O setup_fail2ban.sh https://i.czl.net/useful-linux-sh/scripts/security/setup_fail2ban.sh
+wget -O setup_fail2ban.sh https://i.czl.net/uls/scripts/security/setup_fail2ban.sh
 chmod +x setup_fail2ban.sh
 sudo ./setup_fail2ban.sh
 ```
@@ -102,7 +102,7 @@ sudo ./setup_fail2ban.sh
 UFW和Fail2ban的集中监控管理平台，提供实时监控、IP管理、统计报告等功能。
 
 ```bash
-wget -O security_monitor.sh https://i.czl.net/useful-linux-sh/scripts/security/security_monitor.sh
+wget -O security_monitor.sh https://i.czl.net/uls/scripts/security/security_monitor.sh
 chmod +x security_monitor.sh
 sudo ./security_monitor.sh
 ```
@@ -131,7 +131,7 @@ sudo ./security_monitor.sh
 设置DNS为8.8.8.8和1.1.1.1，支持IPv6 DNS服务器，通过多种机制防止DNS配置被篡改。支持systemd-resolved和传统resolv.conf两种模式，包含自动恢复和定时检查功能。
 
 ```bash
-wget -O setup_dns.sh https://i.czl.net/useful-linux-sh/scripts/network/setup_dns.sh
+wget -O setup_dns.sh https://i.czl.net/uls/scripts/network/setup_dns.sh
 chmod +x setup_dns.sh
 sudo ./setup_dns.sh
 ```
@@ -156,7 +156,7 @@ sudo ./setup_dns.sh --uninstall
 提供IPv4优先级设置和IPv6禁用功能，解决IPv6网络环境下的连接问题，配置灵活易用。
 
 ```bash
-wget -O ipv6_manager.sh https://i.czl.net/useful-linux-sh/scripts/network/ipv6_manager.sh
+wget -O ipv6_manager.sh https://i.czl.net/uls/scripts/network/ipv6_manager.sh
 chmod +x ipv6_manager.sh
 sudo ./ipv6_manager.sh
 ```
@@ -196,7 +196,7 @@ sudo ./ipv6_manager.sh
 一键安装、配置和管理GOST代理服务，支持HTTP/HTTPS和SOCKS5协议，使用systemd进行服务管理。
 
 ```bash
-wget -O setup_gost.sh https://i.czl.net/useful-linux-sh/scripts/network/setup_gost.sh
+wget -O setup_gost.sh https://i.czl.net/uls/scripts/network/setup_gost.sh
 chmod +x setup_gost.sh
 sudo ./setup_gost.sh
 ```
@@ -241,7 +241,7 @@ sudo ./setup_gost.sh
 一键安装、配置和管理Cloudflare WARP代理服务，支持SOCKS5代理，提供完整的账号和IP管理功能。
 
 ```bash
-wget -O setup_warp.sh https://i.czl.net/useful-linux-sh/scripts/network/setup_warp.sh
+wget -O setup_warp.sh https://i.czl.net/uls/scripts/network/setup_warp.sh
 chmod +x setup_warp.sh
 sudo ./setup_warp.sh
 ```
@@ -295,7 +295,7 @@ sudo ./setup_warp.sh
 将Docker volumes从一台服务器迁移到另一台服务器的完整解决方案。支持SSH密钥认证和密码认证,提供批量迁移和选择性迁移功能。
 
 ```bash
-wget -O migrate_volumes.sh https://i.czl.net/useful-linux-sh/scripts/docker/migrate_volumes.sh
+wget -O migrate_volumes.sh https://i.czl.net/uls/scripts/docker/migrate_volumes.sh
 chmod +x migrate_volumes.sh
 sudo ./migrate_volumes.sh
 ```
@@ -320,7 +320,7 @@ sudo ./migrate_volumes.sh
 一键安装和管理V2bX (V2board节点服务端),自动调用上游官方脚本,确保功能始终保持最新。
 
 ```bash
-wget -O setup_v2bx.sh https://i.czl.net/useful-linux-sh/scripts/proxy/setup_v2bx.sh
+wget -O setup_v2bx.sh https://i.czl.net/uls/scripts/proxy/setup_v2bx.sh
 chmod +x setup_v2bx.sh
 sudo ./setup_v2bx.sh
 ```
@@ -358,7 +358,7 @@ journalctl -u V2bX -f     # 查看实时日志
 一键更新 XrayR 等代理软件的 geoip.dat 和 geosite.dat 路由规则文件,保持规则库最新。
 
 ```bash
-wget -O update_geoip_geosite.sh https://i.czl.net/useful-linux-sh/scripts/proxy/update_geoip_geosite.sh
+wget -O update_geoip_geosite.sh https://i.czl.net/uls/scripts/proxy/update_geoip_geosite.sh
 chmod +x update_geoip_geosite.sh
 sudo ./update_geoip_geosite.sh
 ```
@@ -417,7 +417,7 @@ sudo ./update_geoip_geosite.sh
 集成多个主流服务器性能测试工具,提供综合性能评估和网络质量测试。
 
 ```bash
-wget -O server_benchmark.sh https://i.czl.net/useful-linux-sh/scripts/benchmark/server_benchmark.sh
+wget -O server_benchmark.sh https://i.czl.net/uls/scripts/benchmark/server_benchmark.sh
 chmod +x server_benchmark.sh
 sudo ./server_benchmark.sh
 ```

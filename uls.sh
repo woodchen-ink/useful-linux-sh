@@ -7,7 +7,7 @@
 # 配置信息
 SCRIPT_VERSION="2.0.5"
 SCRIPT_NAME="uls.sh"
-SCRIPT_URL="https://i.czl.net/useful-linux-sh"
+SCRIPT_URL="https://i.czl.net/uls"
 INSTALL_DIR="/usr/local/bin"
 CONFIG_DIR="/etc/uls"
 
@@ -561,7 +561,7 @@ main() {
         echo -e "${GREEN}请使用以下命令下载并运行:${NC}"
         echo
         echo -e "${CYAN}# 使用短链接:${NC}"
-        echo -e "curl -fsSL https://i.czl.net/useful-linux-sh/uls.sh -o uls.sh && chmod +x uls.sh && sudo ./uls.sh"
+        echo -e "curl -fsSL https://i.czl.net/uls/uls.sh -o uls.sh && chmod +x uls.sh && sudo ./uls.sh"
         echo
         echo -e "${CYAN}# 或使用完整链接:${NC}"
         echo -e "curl -fsSL https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/heads/main/uls.sh -o uls.sh && chmod +x uls.sh && sudo ./uls.sh"

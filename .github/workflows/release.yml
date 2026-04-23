@@ -59,7 +59,7 @@ jobs:
 
           ### 🚀 快速使用
           ```bash
-          curl -fsSL https://i.czl.net/useful-linux-sh/uls.sh -o uls.sh
+          curl -fsSL https://i.czl.net/uls/uls.sh -o uls.sh
           chmod +x uls.sh
           sudo ./uls.sh
           ```

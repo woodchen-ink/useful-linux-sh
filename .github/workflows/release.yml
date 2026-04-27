@@ -16,6 +16,8 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # 获取完整历史,以便读取 tag 的 annotated message
 
     - name: Validate scripts syntax
       run: |
@@ -32,6 +34,27 @@ jobs:
         VERSION=${VERSION#v}  # 去掉可能的 v 前缀
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         echo "📦 Release version: $VERSION"
+
+    - name: Extract tag message
+      id: tag_message
+      run: |
+        TAG_NAME=${GITHUB_REF#refs/tags/}
+        # 确保 tag 元数据可用
+        git fetch --tags --force
+        # 提取 annotated tag 的 message (去掉 PGP 签名等附加内容,只保留主体)
+        # 对 lightweight tag 该命令会返回 commit message,作为兜底也合理
+        TAG_BODY=$(git tag -l --format='%(contents:subject)%0A%0A%(contents:body)' "$TAG_NAME")
+        # 若 tag message 为空,使用兜底文案
+        if [ -z "$(echo "$TAG_BODY" | tr -d '[:space:]')" ]; then
+          TAG_BODY="本次发布无附加说明,请查看提交记录了解变更详情。"
+        fi
+        # 通过多行输出语法写入 GITHUB_OUTPUT
+        {
+          echo "body<<TAG_BODY_EOF"
+          echo "$TAG_BODY"
+          echo "TAG_BODY_EOF"
+        } >> "$GITHUB_OUTPUT"
+        echo "📝 Tag message 已提取"
 
     - name: Update version in uls.sh
       run: |
@@ -57,24 +80,16 @@ jobs:
         body: |
           ## ULS (Useful Linux Scripts) v${{ steps.version.outputs.version }}
 
+          ### ✨ 本次更新
+
+          ${{ steps.tag_message.outputs.body }}
+
           ### 🚀 快速使用
           ```bash
           curl -fsSL https://i.czl.net/uls/uls.sh -o uls.sh
           chmod +x uls.sh
           sudo ./uls.sh
           ```
-
-          ### 📋 功能特性
-          - 🔄 Swap空间管理 - 一键添加swap空间
-          - 🚀 BBR TCP优化 - 启用BBR拥塞控制算法
-          - 🛡️ UFW防火墙配置 - 配置UFW防火墙规则
-          - 🚫 Fail2ban防护 - 安装配置入侵防护
-          - 🌐 DNS配置锁定 - 设置并锁定DNS服务器
-
-          ### ✨ 更新内容
-          - 每次执行都下载最新脚本版本
-          - 基于GitHub Release的自动版本管理
-          - 改进的错误处理和用户体验
 
           ### 📥 下载文件
           - `uls.sh` - ULS主管理脚本

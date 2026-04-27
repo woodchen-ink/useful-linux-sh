@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # ULS - Useful Linux Scripts 统一管理脚本
-# 版本: 2.0.6
+# 版本: 2.0.7
 # 作者: woodchen-ink
 
 # 配置信息
-SCRIPT_VERSION="2.0.6"
+SCRIPT_VERSION="2.0.7"
 SCRIPT_NAME="uls.sh"
 SCRIPT_URL="https://i.czl.net/uls"
 INSTALL_DIR="/usr/local/bin"

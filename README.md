@@ -78,6 +78,22 @@ sudo ./optimize_sysctl.sh
 - 优化参数写入独立配置文件 `/etc/sysctl.d/99-uls-optimize.conf`，不污染原 sysctl.conf
 - 自动备份原始配置，支持一键还原
 
+#### 🧹 Journal 日志清理脚本
+清理 systemd-journald 累积日志并设置大小上限,避免日志再次膨胀占用磁盘。支持按时间或大小清理,并提供 `SystemMaxUse` / `SystemMaxFileSize` / `MaxRetentionSec` 三项配置。
+
+```bash
+wget -O cleanup_journal.sh https://i.czl.net/uls/scripts/system/cleanup_journal.sh
+chmod +x cleanup_journal.sh
+sudo ./cleanup_journal.sh
+```
+
+**功能特点：**
+- 📊 操作前后展示 journal 磁盘占用
+- 🗑️ 支持按时间 (`--vacuum-time`) 或大小 (`--vacuum-size`) 清理
+- ⚙️ 自动写入大小上限配置到 `/etc/systemd/journald.conf`
+- 💾 修改前自动备份原配置到 `/etc/uls/backup/`
+- 🔄 自动重启 systemd-journald 使配置生效
+
 ### 🔒 安全防护脚本
 
 #### 🛡️ UFW防火墙配置脚本

@@ -20,6 +20,13 @@ HAS_IPV6=false
 # 是否配置IPv6 DNS(用户选择)
 CONFIGURE_IPV6=false
 
+# DNSSEC 模式 (yes / allow-downgrade / no)
+# - yes: 严格校验,签名链不全的域名直接 SERVFAIL (典型踩坑:中转域名/CDN 多级 CNAME 经常签名链断)
+# - allow-downgrade: 校验有签名的域名,签名缺失/不完整时降级为不校验,生产推荐
+# - no: 完全关掉,把校验交给上游 DNS (1.1.1.1 / 8.8.8.8 都自带 DNSSEC)
+# 默认 allow-downgrade,兼顾安全与可用性
+DNSSEC_MODE="allow-downgrade"
+
 # 日志函数
 log_info() {
     echo -e "${GREEN}[INFO]${NC} $1"
@@ -104,6 +111,31 @@ detect_ipv6() {
     fi
 }
 
+# 选择 DNSSEC 模式
+# 历史踩坑: 默认 yes 会让多级 CNAME 中转域名 (CDN / saas) 偶发 SERVFAIL,
+# 表现为 host 命令解析失败,但 dig +short 正常。allow-downgrade 是更稳的默认值。
+choose_dnssec_mode() {
+    log_step "选择 DNSSEC 校验模式..."
+    echo ""
+    echo -e "${YELLOW}DNSSEC 校验策略:${NC}"
+    echo "1) allow-downgrade  (推荐) 有签名的校验,签名缺失时降级,兼顾安全与可用性"
+    echo "2) yes              严格校验,中转/CDN 域名容易 SERVFAIL,适合纯内网场景"
+    echo "3) no               不校验,上游 DNS (1.1.1.1/8.8.8.8) 自带 DNSSEC,故障率最低"
+    read -p "请选择 (1-3) [默认: 1]: " dnssec_choice
+    dnssec_choice=${dnssec_choice:-1}
+
+    case $dnssec_choice in
+        1) DNSSEC_MODE="allow-downgrade" ;;
+        2) DNSSEC_MODE="yes" ;;
+        3) DNSSEC_MODE="no" ;;
+        *)
+            DNSSEC_MODE="allow-downgrade"
+            log_warn "无效选择,使用默认: allow-downgrade"
+            ;;
+    esac
+    log_info "DNSSEC 模式: $DNSSEC_MODE"
+}
+
 # 备份原始配置
 backup_config() {
     log_step "备份原始DNS配置..."
@@ -172,7 +204,7 @@ configure_dns_services() {
 [Resolve]
 DNS=$dns_list
 FallbackDNS=
-DNSSEC=yes
+DNSSEC=$DNSSEC_MODE
 DNSOverTLS=opportunistic
 Cache=yes
 DNSStubListener=yes
@@ -516,6 +548,11 @@ show_config_info() {
 uninstall() {
     echo -e "${YELLOW}正在卸载DNS配置...${NC}"
 
+    # restart_network 依赖 $OS 变量,从菜单/参数路径进来时还没探测过系统
+    if [ -z "$OS" ]; then
+        detect_os
+    fi
+
     # 停止保护服务
     systemctl stop protect-dns.timer 2>/dev/null
     systemctl stop protect-dns.service 2>/dev/null
@@ -562,36 +599,18 @@ uninstall() {
     log_info "DNS配置已卸载"
 }
 
-# 主函数
-main() {
-    echo -e "${GREEN}DNS配置脚本${NC}"
-    echo -e "设置DNS为 8.8.8.8 和 1.1.1.1，支持IPv6，并防止更改"
-    echo ""
-
-    # 检查参数
-    if [[ $1 == "--uninstall" ]]; then
-        check_root
-        uninstall
-        exit 0
-    fi
-
-    # 检查权限
-    check_root
-
-    # 检测系统
+# 安装 / 重装 DNS 配置 (主路径)
+do_install() {
     detect_os
-
-    # 检测IPv6支持
     detect_ipv6
+    choose_dnssec_mode
 
-    # 执行配置步骤
     backup_config
     configure_dns_services
     configure_dns
     lock_dns_config
     restart_network
 
-    # 测试DNS
     if test_dns; then
         show_config_info
         log_info "DNS配置成功完成！"
@@ -599,6 +618,51 @@ main() {
         log_error "DNS配置可能存在问题，请检查网络设置"
         exit 1
     fi
+}
+
+# 主菜单 (无参直接进入)
+show_main_menu() {
+    echo -e "${GREEN}DNS 配置脚本${NC}"
+    echo -e "默认 DNS 为 ${BLUE}8.8.8.8${NC} / ${BLUE}1.1.1.1${NC},支持 IPv6,可锁定防止被篡改"
+    echo ""
+    echo -e "${YELLOW}请选择操作:${NC}"
+    echo "1) 安装 / 重新配置 DNS    (会覆盖现有 DNS 配置并启用每分钟保护)"
+    echo "2) 卸载 / 回退 DNS 配置   (停止保护服务,删除 dns.conf,恢复备份)"
+    echo "0) 退出"
+    echo ""
+    read -p "请选择 (0-2) [默认: 1]: " action_choice
+    action_choice=${action_choice:-1}
+
+    case $action_choice in
+        1) do_install ;;
+        2) uninstall ;;
+        0)
+            log_info "已退出"
+            exit 0
+            ;;
+        *)
+            log_error "无效选择"
+            exit 1
+            ;;
+    esac
+}
+
+# 主函数
+main() {
+    # 兼容旧版 --uninstall 直传参数
+    if [[ $1 == "--uninstall" ]]; then
+        check_root
+        uninstall
+        exit 0
+    fi
+    if [[ $1 == "--install" ]]; then
+        check_root
+        do_install
+        exit 0
+    fi
+
+    check_root
+    show_main_menu
 }
 
 # 信号处理

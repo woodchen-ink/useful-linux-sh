@@ -144,12 +144,14 @@ sudo ./security_monitor.sh
 ### 🌐 网络配置脚本
 
 #### 🌐 DNS配置锁定脚本
-设置DNS为8.8.8.8和1.1.1.1，支持IPv6 DNS服务器，通过多种机制防止DNS配置被篡改。支持systemd-resolved和传统resolv.conf两种模式，包含自动恢复和定时检查功能。
+设置DNS为8.8.8.8和1.1.1.1，支持IPv6 DNS服务器，通过多种机制防止DNS配置被篡改。支持systemd-resolved和传统resolv.conf两种模式，包含自动恢复和定时检查功能。脚本启动后会先弹一个 1) 安装/重装 2) 卸载/回退 0) 退出 的小菜单，方便从 ULS 主菜单单一入口走到回退路径。
 
 ```bash
 wget -O setup_dns.sh https://i.czl.net/uls/scripts/network/setup_dns.sh
 chmod +x setup_dns.sh
-sudo ./setup_dns.sh
+sudo ./setup_dns.sh           # 进入交互菜单(安装/卸载二选一)
+sudo ./setup_dns.sh --install # 直接走安装路径,跳过菜单
+sudo ./setup_dns.sh --uninstall # 直接走卸载路径,跳过菜单
 ```
 
 **功能特性：**
@@ -159,14 +161,11 @@ sudo ./setup_dns.sh
   - 选项2：仅配置IPv4 DNS
   - Google IPv6 DNS: 2001:4860:4860::8888
   - Cloudflare IPv6 DNS: 2606:4700:4700::1111
+- 🔐 **DNSSEC 模式可选**: 默认 `allow-downgrade`(签名缺失自动降级,兼顾安全与可用性)。原始默认 `yes` 在中转/CDN 多级 CNAME 场景下经常 SERVFAIL,可改成 `no` 完全交给上游 DNS 校验。
 - 🔒 **多重保护**: chattr锁定 + systemd定时检查 + 自动恢复
 - 🔧 **智能适配**: 支持systemd-resolved和传统resolv.conf模式
 - ✅ **完整测试**: 根据配置测试IPv4和/或IPv6解析功能
-
-卸载DNS锁定：
-```bash
-sudo ./setup_dns.sh --uninstall
-```
+- 🗑️ **菜单内卸载**: 卸载会停止保护 timer、解锁并删除 `dns.conf`、恢复 `/etc/resolv.conf` 备份、重启 systemd-resolved
 
 #### 🌍 IPv6管理工具
 提供IPv4优先级设置和IPv6禁用功能，解决IPv6网络环境下的连接问题，配置灵活易用。

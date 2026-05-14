@@ -164,7 +164,7 @@ show_menu() {
     echo -e "${WHITE}  ${BLUE}3.${NC} ${GREEN}🛡️  UFW防火墙配置${NC}   - 配置UFW防火墙规则"
     echo -e "${WHITE}  ${BLUE}4.${NC} ${GREEN}🚫 Fail2ban防护${NC}     - 安装配置入侵防护"
     echo -e "${WHITE}  ${BLUE}5.${NC} ${GREEN}🔍 安全监控管理${NC}     - UFW和Fail2ban监控管理"
-    echo -e "${WHITE}  ${BLUE}6.${NC} ${GREEN}🌐 DNS配置锁定${NC}      - 设置并锁定DNS服务器"
+    echo -e "${WHITE}  ${BLUE}6.${NC} ${GREEN}🌐 DNS配置锁定${NC}      - 设置/卸载并锁定DNS服务器(可选 DNSSEC 模式)"
     echo -e "${WHITE}  ${BLUE}7.${NC} ${GREEN}🔀 端口转发管理${NC}     - 配置防火墙端口转发规则"
     echo -e "${WHITE}  ${BLUE}8.${NC} ${GREEN}🌍 IPv6管理工具${NC}     - IPv4优先级/禁用IPv6"
     echo -e "${WHITE}  ${BLUE}9.${NC} ${GREEN}🔌 GOST代理管理${NC}     - HTTP/SOCKS5代理服务"

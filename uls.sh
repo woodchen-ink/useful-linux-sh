@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ULS - Useful Linux Scripts 统一管理脚本
-# 版本: 2.0.8
+# 版本: 2.0.9
 # 作者: woodchen-ink
 
 # 配置信息

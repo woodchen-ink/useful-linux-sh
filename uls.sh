@@ -5,7 +5,7 @@
 # 作者: woodchen-ink
 
 # 配置信息
-SCRIPT_VERSION="2.0.8"
+SCRIPT_VERSION="2.0.9"
 SCRIPT_NAME="uls.sh"
 SCRIPT_URL="https://i.czl.net/uls"
 INSTALL_DIR="/usr/local/bin"
@@ -134,6 +134,9 @@ run_script() {
         "cleanup_journal.sh")
             download_script "$script_name" "scripts/system/cleanup_journal.sh" || return 1
             ;;
+        "cleanup_disk.sh")
+            download_script "$script_name" "scripts/system/cleanup_disk.sh" || return 1
+            ;;
         *)
             log_error "未知脚本: $script_name"
             return 1
@@ -176,8 +179,9 @@ show_menu() {
     echo -e "${WHITE}  ${BLUE}15.${NC} ${GREEN}🔑 SSH端口修改${NC}      - 修改SSH服务监听端口"
     echo -e "${WHITE}  ${BLUE}16.${NC} ${GREEN}⚡ 系统参数优化${NC}     - 优化sysctl内核网络参数"
     echo -e "${WHITE}  ${BLUE}17.${NC} ${GREEN}🧹 Journal日志清理${NC}  - 清理systemd日志并设上限"
+    echo -e "${WHITE}  ${BLUE}18.${NC} ${GREEN}🧽 磁盘垃圾清理${NC}     - 清理包缓存/Docker/临时文件/定位大文件"
     echo
-    echo -e "${WHITE}  ${PURPLE}18.${NC} ${CYAN}🗑️  卸载ULS脚本${NC}     - 卸载并清理所有文件"
+    echo -e "${WHITE}  ${PURPLE}19.${NC} ${CYAN}🗑️  卸载ULS脚本${NC}     - 卸载并清理所有文件"
     echo
     echo -e "${WHITE}  ${RED}0.${NC} ${RED}❌ 退出程序${NC}"
     echo
@@ -344,7 +348,7 @@ main_loop() {
     while true; do
         show_menu
 
-        read -p "请输入选项 (0-18): " choice
+        read -p "请输入选项 (0-19): " choice
 
         case $choice in
             1)
@@ -416,6 +420,10 @@ main_loop() {
                 run_script "cleanup_journal.sh"
                 ;;
             18)
+                echo
+                run_script "cleanup_disk.sh"
+                ;;
+            19)
                 echo
                 uninstall_uls
                 ;;

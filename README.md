@@ -94,6 +94,22 @@ sudo ./cleanup_journal.sh
 - 💾 修改前自动备份原配置到 `/etc/uls/backup/`
 - 🔄 自动重启 systemd-journald 使配置生效
 
+#### 🧽 磁盘垃圾清理脚本
+一站式清理服务器常见磁盘垃圾,菜单驱动,支持一键清理或分项清理。删除前展示将清理的内容并要求确认,数据卷等高风险操作二次确认,大文件仅列出不删除。
+
+```bash
+wget -O cleanup_disk.sh https://i.czl.net/uls/scripts/system/cleanup_disk.sh
+chmod +x cleanup_disk.sh
+sudo ./cleanup_disk.sh
+```
+
+**清理范围：**
+- 📦 包管理器缓存:自动适配 apt / dnf / yum / pacman,清理缓存、孤立依赖 (apt 含旧内核)
+- 🐳 Docker 无用数据:停止的容器、悬空镜像、无用网络、构建缓存;数据卷默认保留,需二次确认才清理
+- 🗑️ 旧临时文件:按修改时间清理 `/tmp` 与 `/var/tmp` 中超过指定天数的文件,避免误删运行中文件
+- 🔍 大文件定位:列出指定目录占用最大的子目录与文件 (只读),并展示 `/var/lib/docker/overlay2` 占用 Top 5
+- 📊 清理前后展示根分区磁盘占用对比
+
 ### 🔒 安全防护脚本
 
 #### 🛡️ UFW防火墙配置脚本

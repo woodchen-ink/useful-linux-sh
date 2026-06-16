@@ -348,12 +348,17 @@ sudo ./migrate_volumes.sh
 ### 🚄 代理节点管理脚本
 
 #### 🚄 V2bX节点管理脚本
-一键安装和管理V2bX (V2board节点服务端),自动调用上游官方脚本,确保功能始终保持最新。
+一键安装和管理V2bX (V2board节点服务端),安装走上游官方脚本确保功能最新;启动后弹出菜单可选安装/卸载/查看状态,卸载会自动检测已安装组件、停止进程并删除服务与文件。
 
 ```bash
 wget -O setup_v2bx.sh https://i.czl.net/uls/scripts/proxy/setup_v2bx.sh
 chmod +x setup_v2bx.sh
 sudo ./setup_v2bx.sh
+
+# 跳过菜单直达
+sudo ./setup_v2bx.sh --install     # 直接安装/管理
+sudo ./setup_v2bx.sh --uninstall   # 直接卸载
+sudo ./setup_v2bx.sh --status      # 仅查看安装状态
 ```
 
 **关于 V2bX:**
@@ -368,6 +373,8 @@ sudo ./setup_v2bx.sh
 - 📦 自动安装所有必要依赖
 - 🛠️ 完整的服务管理命令提示
 - 📝 详细的配置文档链接
+- 🗑️ 内置卸载:自动检测服务(systemd/OpenRC)、程序目录、配置目录、管理命令并清理,删除前展示清单并二次确认
+- 🧹 卸载兜底:脱离服务管理器的残留 V2bX 进程也会被强制结束
 
 **常用管理命令:**
 ```bash
@@ -378,7 +385,7 @@ systemctl status V2bX     # 查看状态
 journalctl -u V2bX -f     # 查看实时日志
 ```
 
-**配置文件位置:** `/etc/V2bX/config.yml`
+**安装路径:** 程序目录 `/usr/local/V2bX/`,配置目录 `/etc/V2bX/`(含 `config.json`、证书、路由规则),管理命令 `/usr/bin/V2bX`(软链 `/usr/bin/v2bx`)
 
 **注意事项:**
 - 需要配合修改版 V2board 使用

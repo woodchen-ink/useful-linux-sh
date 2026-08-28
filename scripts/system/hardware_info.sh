@@ -1086,14 +1086,33 @@ show_sensors() {
     fi
 
     # 电源模块状态:仅部分服务器主板通过 DMI type 39 暴露
+    # 白牌/消费级主板常把名称填成 "To Be Filled By O.E.M." 且状态为 Unknown,
+    # 这类记录没有参考价值,名称回退为序号;整节全无有效状态时不展示
     if command -v dmidecode &>/dev/null && [ "$(detect_virt)" = "none" ]; then
         local psu
         psu=$(dmidecode -t 39 2>/dev/null | awk -F': ' '
             /Name:/ {name=$2}
-            /Status:/ {if (name != "") {printf "    %-28s %s\n", name, $2; name=""}}')
+            /Status:/ {
+                if (name == "") next;
+                status=$2;
+                # 厂商未填写的占位名回退为"电源 N"
+                if (name ~ /To Be Filled|Not Specified|Default string|O\.E\.M\.|^$/) {
+                    idx++; name = "电源 " idx;
+                } else { idx++ }
+                # 记录是否存在有效状态 (非 Unknown)
+                if (status !~ /Unknown/) valid++;
+                # 输出为 名称<TAB>状态,交由 shell 端按显示宽度对齐
+                lines = lines name "\t" status "\n";
+                name="";
+            }
+            END { if (valid > 0) printf "%s", lines }')
         if [ -n "$psu" ]; then
             print_subtitle "电源模块"
-            echo "$psu"
+            local psu_name psu_status
+            while IFS=$'\t' read -r psu_name psu_status; do
+                [ -z "$psu_name" ] && continue
+                print_kv "$psu_name" "$psu_status"
+            done <<< "$psu"
         fi
     fi
 }

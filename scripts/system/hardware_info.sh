@@ -307,11 +307,15 @@ cleanup_installed_pkgs() {
 
 # 检测虚拟化环境,输出虚拟化类型或 none
 detect_virt() {
+    local v
     if command -v systemd-detect-virt &>/dev/null; then
-        systemd-detect-virt 2>/dev/null || echo "none"
+        # 裸金属上 systemd-detect-virt 会输出 none 并以退出码 1 结束,
+        # 这是它表示"非虚拟化"的正常约定,不能当命令失败处理再补一个 none
+        v=$(systemd-detect-virt 2>/dev/null | head -n1 | tr -d '[:space:]')
+        echo "${v:-none}"
     elif command -v virt-what &>/dev/null; then
-        local v
-        v=$(virt-what 2>/dev/null | head -n1)
+        # virt-what 在裸金属上输出为空
+        v=$(virt-what 2>/dev/null | head -n1 | tr -d '[:space:]')
         echo "${v:-none}"
     else
         # 无检测工具时从 DMI 产品名做粗判
@@ -703,7 +707,9 @@ show_smart_nvme() {
     media_err=$(echo "$attrs" | awk -F: '/Media and Data Integrity Errors/ {gsub(/[ ,]/, "", $2); print $2; exit}')
     crit_warn=$(echo "$attrs" | awk -F: '/Critical Warning/ {gsub(/[ ]/, "", $2); print $2; exit}')
     temp=$(echo "$attrs" | awk -F: '/^Temperature:/ {gsub(/[ ]/, "", $2); sub(/Celsius/, "", $2); print $2; exit}')
-    written=$(echo "$attrs" | awk -F: '/Data Units Written/ {print $2; exit}' | sed 's/^ *//')
+    # smartctl 输出形如 "84,828,677 [43.4 TB]",方括号内的换算值才是可读的,优先取它
+    written=$(echo "$attrs" | awk -F: '/Data Units Written/ {print $2; exit}' \
+        | sed -e 's/.*\[\(.*\)\].*/\1/' -e 's/^ *//' -e 's/ *$//')
 
     if [ -n "$used" ]; then
         local life=$(( 100 - used ))
@@ -907,7 +913,13 @@ show_nic_one() {
         else
             speed_str="${speed} Mbps"
         fi
-        print_kv2 "协商速率" "${BOLD}${speed_str}${NC}${duplex:+  ${GRAY}${duplex}工${NC}}"
+        # sysfs 的 duplex 值为 full/half,转成中文表述
+        local duplex_cn=""
+        case "$duplex" in
+            full) duplex_cn="全双工" ;;
+            half) duplex_cn="半双工" ;;
+        esac
+        print_kv2 "协商速率" "${BOLD}${speed_str}${NC}${duplex_cn:+  ${GRAY}${duplex_cn}${NC}}"
         check_nic_negotiation "$name" "$speed"
     elif [ "$operstate" = "up" ]; then
         print_kv2 "协商速率" "${GRAY}未知${NC}"

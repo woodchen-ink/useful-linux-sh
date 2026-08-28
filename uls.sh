@@ -456,6 +456,12 @@ main_loop() {
 
 # 启动时自动检查并更新版本
 check_version_update() {
+    # 刚完成自动更新重启的实例跳过检查:无论版本号因何原因仍显示为旧值,
+    # 都不会再次触发更新,从根本上杜绝无限重启循环
+    if [ -n "$ULS_UPDATED" ]; then
+        return 0
+    fi
+
     log_info "正在检查ULS版本更新..."
 
     local latest_version=$(get_latest_release 2>/dev/null)
@@ -487,19 +493,46 @@ check_version_update() {
         if [ "$download_success" = true ] && [ -f "$temp_file" ]; then
             # 验证下载的文件语法
             if bash -n "$temp_file" 2>/dev/null; then
+                # 校验下载内容确实是目标版本,避免拿到缓存的旧文件后反复重启
+                local downloaded_version
+                downloaded_version=$(grep -m1 'SCRIPT_VERSION=' "$temp_file" | cut -d'"' -f2)
+                if [ "$downloaded_version" != "$latest_version" ]; then
+                    log_warn "下载内容版本为 v${downloaded_version:-未知},与预期 v$latest_version 不符,跳过自动更新"
+                    log_info "可能是 CDN 缓存尚未刷新,稍后重试即可"
+                    rm -f "$temp_file"
+                    return 0
+                fi
+
+                # 解析脚本自身的真实路径:$0 可能是相对路径,cd 后会失效
+                local self_path
+                self_path=$(readlink -f "$0" 2>/dev/null || echo "$0")
+
                 # 备份当前版本
                 mkdir -p "$CONFIG_DIR/backup"
                 local backup_file="$CONFIG_DIR/backup/uls_${SCRIPT_VERSION}_$(date +%Y%m%d_%H%M%S).sh"
-                cp "$0" "$backup_file"
+                cp "$self_path" "$backup_file" 2>/dev/null
 
-                # 更新脚本
-                cp "$temp_file" "$0"
-                chmod +x "$0"
+                # 更新脚本:写入失败必须终止,否则 exec 会重启旧版本形成无限更新循环
+                if ! cp "$temp_file" "$self_path" 2>/dev/null; then
+                    log_error "无法写入 $self_path,跳过自动更新"
+                    log_info "请检查文件权限或手动更新: curl -fsSL $SCRIPT_URL/uls.sh -o $self_path"
+                    rm -f "$temp_file"
+                    return 0
+                fi
+                chmod +x "$self_path" 2>/dev/null
+
+                # 回读确认写入生效,防止文件系统只读/被占用导致内容未真正更新
+                local written_version
+                written_version=$(grep -m1 'SCRIPT_VERSION=' "$self_path" | cut -d'"' -f2)
+                if [ "$written_version" != "$latest_version" ]; then
+                    log_error "更新写入未生效 (当前仍为 v${written_version:-未知}),跳过重启避免循环"
+                    rm -f "$temp_file"
+                    return 0
+                fi
 
                 # 如果安装到系统目录，也更新那里的副本
-                if [ -f "$INSTALL_DIR/uls" ]; then
-                    cp "$temp_file" "$INSTALL_DIR/uls"
-                    chmod +x "$INSTALL_DIR/uls"
+                if [ -f "$INSTALL_DIR/uls" ] && [ "$self_path" != "$INSTALL_DIR/uls" ]; then
+                    cp "$temp_file" "$INSTALL_DIR/uls" 2>/dev/null && chmod +x "$INSTALL_DIR/uls" 2>/dev/null
                 fi
 
                 rm -f "$temp_file"
@@ -509,7 +542,9 @@ check_version_update() {
 
                 log_success "已自动更新到 v$latest_version，正在重新启动..."
                 sleep 1
-                exec "$0"
+                # 传递标记,重启后的实例不再检查更新,兜底阻断任何意外的循环
+                # 不转发参数:此处的 $@ 是函数自身的参数而非脚本参数,且交互式菜单无需参数
+                ULS_UPDATED=1 exec "$self_path"
             else
                 log_warn "下载的文件语法检查失败，跳过自动更新"
                 rm -f "$temp_file"

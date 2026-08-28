@@ -56,21 +56,47 @@ setup_directories() {
 }
 
 # 下载脚本函数
+# 优先从带版本号(tag)的固定 URL 下载,再落地为不带版本号的本地文件名。
+# 这样做的原因:CDN 对 main 分支路径有 5 分钟缓存 (max-age=300),刚发版时
+# 会出现"API 已报告新版本、CDN 仍返回旧文件"的窗口期;按 tag 取的地址内容
+# 不可变且不受该缓存影响,能确保拿到与当前版本匹配的脚本。
 download_script() {
     local script_name="$1"
     local script_path="$2"
     local local_path="$CONFIG_DIR/scripts/$script_name"
+    local tmp_path="${local_path}.tmp"
 
     log_info "正在下载 $script_name..."
 
-    if curl -fsSL "$SCRIPT_URL/$script_path" -o "$local_path"; then
-        chmod +x "$local_path"
-        log_success "$script_name 下载完成"
-        return 0
-    else
+    local ok=false
+    # 1) 按版本 tag 下载 (内容不可变,不受 CDN 缓存影响)
+    local tagged_url="https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/v${SCRIPT_VERSION}/${script_path}"
+    if curl -fsSL "$tagged_url" -o "$tmp_path" 2>/dev/null && [ -s "$tmp_path" ]; then
+        ok=true
+    # 2) 回退到 CDN 上的 main 分支 (tag 不存在或网络受限时)
+    elif curl -fsSL "$SCRIPT_URL/$script_path" -o "$tmp_path" 2>/dev/null && [ -s "$tmp_path" ]; then
+        ok=true
+        log_warn "已回退到主分支版本下载"
+    fi
+
+    if [ "$ok" != true ]; then
         log_error "$script_name 下载失败"
+        rm -f "$tmp_path"
         return 1
     fi
+
+    # 下载内容必须是可执行的 shell 脚本:CDN 异常时可能返回错误页而非脚本
+    if ! bash -n "$tmp_path" 2>/dev/null; then
+        log_error "$script_name 内容校验失败(可能下载到错误页面),已放弃"
+        rm -f "$tmp_path"
+        return 1
+    fi
+
+    # 校验通过后再重命名为正式文件名,避免损坏的内容覆盖可用脚本
+    mv -f "$tmp_path" "$local_path"
+    chmod +x "$local_path"
+    log_success "$script_name 下载完成"
+    return 0
 }
 
 # 执行脚本函数 - 每次都重新下载最新版本

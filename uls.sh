@@ -137,6 +137,9 @@ run_script() {
         "cleanup_disk.sh")
             download_script "$script_name" "scripts/system/cleanup_disk.sh" || return 1
             ;;
+        "hardware_info.sh")
+            download_script "$script_name" "scripts/system/hardware_info.sh" || return 1
+            ;;
         *)
             log_error "未知脚本: $script_name"
             return 1
@@ -180,8 +183,9 @@ show_menu() {
     echo -e "${WHITE}  ${BLUE}16.${NC} ${GREEN}⚡ 系统参数优化${NC}     - 优化sysctl内核网络参数"
     echo -e "${WHITE}  ${BLUE}17.${NC} ${GREEN}🧹 Journal日志清理${NC}  - 清理systemd日志并设上限"
     echo -e "${WHITE}  ${BLUE}18.${NC} ${GREEN}🧽 磁盘垃圾清理${NC}     - 清理包缓存/Docker/临时文件/定位大文件"
+    echo -e "${WHITE}  ${BLUE}19.${NC} ${GREEN}🖥️  硬件配置与健康${NC}   - 独服CPU/内存/硬盘寿命/网卡速率概览"
     echo
-    echo -e "${WHITE}  ${PURPLE}19.${NC} ${CYAN}🗑️  卸载ULS脚本${NC}     - 卸载并清理所有文件"
+    echo -e "${WHITE}  ${PURPLE}20.${NC} ${CYAN}🗑️  卸载ULS脚本${NC}     - 卸载并清理所有文件"
     echo
     echo -e "${WHITE}  ${RED}0.${NC} ${RED}❌ 退出程序${NC}"
     echo
@@ -348,7 +352,7 @@ main_loop() {
     while true; do
         show_menu
 
-        read -p "请输入选项 (0-19): " choice
+        read -p "请输入选项 (0-20): " choice
 
         case $choice in
             1)
@@ -424,6 +428,10 @@ main_loop() {
                 run_script "cleanup_disk.sh"
                 ;;
             19)
+                echo
+                run_script "hardware_info.sh"
+                ;;
+            20)
                 echo
                 uninstall_uls
                 ;;

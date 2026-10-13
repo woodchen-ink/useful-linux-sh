@@ -499,6 +499,27 @@ sudo ./server_benchmark.sh
    - 综合性服务器性能评估
    - 适合VPS/云服务器全面测试
 
+3. **YABS服务器测评（Yet Another Bench Script）**
+   - 展示CPU、内存、磁盘、系统及虚拟化等配置
+   - fio磁盘读写性能、iperf3网络测速、Geekbench 5/6单核/多核跑分
+   - 子菜单支持四种模式：跳过网络测速（默认，`-i`）、完整测试、仅配置和Geekbench 6（`-fi`）、仅配置和Geekbench 5（`-fi5`）
+   - 只跑GB5：ULS主菜单选择「14. 服务器性能测试」→「3. YABS服务器测评」→「4. 仅配置和Geekbench 5」，无需单独输入命令
+   - 完整测试会消耗较多网络流量；资源有限或流量受限的服务器建议跳过网络测速
+   - 下载后检查脚本非空、Bash脚本头和语法，执行结束或中断时清理下载文件
+   - 上游项目：https://github.com/masonr/yet-another-bench-script
+
+**YABS独立运行命令：**
+```bash
+# 配置、磁盘和Geekbench 6，跳过网络测速
+curl -fsSL https://yabs.sh | bash -s -- -i
+
+# 完整测试
+curl -fsSL https://yabs.sh | bash
+
+# 仅配置和Geekbench 6，跳过磁盘和网络测速
+curl -fsSL https://yabs.sh | bash -s -- -fi
+```
+
 **功能特性:**
 - 🎯 交互式菜单选择测试工具
 - 🔄 自动调用最新上游测试脚本

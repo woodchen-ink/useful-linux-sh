@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 服务器测速工具脚本
-# 版本: 1.0
+# 版本: 1.1
 # 功能: 提供多种服务器性能测试工具
 
 # 颜色定义
@@ -58,6 +58,10 @@ show_info() {
     echo -e "   - CPU、内存、磁盘、网络全方位测试"
     echo -e "   - 适合VPS/云服务器全面评估"
     echo
+    echo -e "${GREEN}3. YABS服务器测评${NC}"
+    echo -e "   - 查看服务器配置、fio磁盘性能和Geekbench 5/6跑分"
+    echo -e "   - 可选完整测试、跳过网络测速或仅配置和跑分"
+    echo
 }
 
 # 显示菜单
@@ -67,6 +71,7 @@ show_menu() {
     echo
     echo -e "  ${GREEN}1.${NC} NodeQuality测试        - 节点质量综合测试"
     echo -e "  ${GREEN}2.${NC} VPS融合怪服务器测评    - 全方位性能测试"
+    echo -e "  ${GREEN}3.${NC} YABS服务器测评         - 配置、磁盘、网络和Geekbench跑分"
     echo
     echo -e "  ${RED}0.${NC} 返回上级菜单"
     echo
@@ -106,12 +111,72 @@ run_goecs() {
     rm -f goecs.sh
 }
 
+# YABS测试：下载校验后执行，子shell退出时清理下载文件
+run_yabs() (
+    local mode
+    local args=()
+    local temp_script
+    local status
+
+    echo -e "${YELLOW}请选择YABS测试模式:${NC}"
+    echo "  1. 跳过网络测速（推荐） - 配置、fio磁盘、Geekbench 6"
+    echo "  2. 完整测试             - 配置、磁盘、网络、Geekbench 6"
+    echo "  3. 仅配置和Geekbench 6  - 跳过磁盘和网络测速"
+    echo "  4. 仅配置和Geekbench 5  - 跳过磁盘、网络测速和GB6"
+    echo "  0. 返回测试工具菜单"
+    echo
+    read -r -p "请输入选项 (0-4，默认1): " mode || return 1
+
+    case "${mode:-1}" in
+        1) args=(-i) ;;
+        2) args=() ;;
+        3) args=(-fi) ;;
+        4) args=(-fi5) ;;
+        0) return 0 ;;
+        *) log_error "无效选项"; return 1 ;;
+    esac
+
+    log_warn "测试会占用CPU、内存；完整测试还会消耗较多网络流量"
+    if ! command -v curl >/dev/null 2>&1; then
+        log_error "curl 未安装，请先安装curl"
+        return 1
+    fi
+
+    temp_script=$(mktemp "${TMPDIR:-/tmp}/uls-yabs.XXXXXX") || {
+        log_error "无法创建YABS临时文件"
+        return 1
+    }
+    trap 'rm -f "$temp_script"' EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+
+    log_info "正在下载YABS官方脚本..."
+    if ! curl -fsSL --connect-timeout 15 --max-time 120 https://yabs.sh -o "$temp_script"; then
+        log_error "YABS下载失败"
+        return 1
+    fi
+    if [ ! -s "$temp_script" ] || ! head -n 1 "$temp_script" | grep -q '^#!.*bash' || ! bash -n "$temp_script"; then
+        log_error "YABS脚本校验失败，已放弃执行"
+        return 1
+    fi
+
+    log_info "正在启动YABS服务器测评..."
+    bash "$temp_script" "${args[@]}"
+    status=$?
+    if [ "$status" -eq 0 ]; then
+        log_success "YABS脚本运行结束，请查看上方各项测试结果"
+    else
+        log_error "YABS运行失败或中断（退出码: $status）"
+    fi
+    return "$status"
+)
+
 # 主程序循环
 main_loop() {
     while true; do
         show_menu
 
-        read -p "请输入选项 (0-2): " choice
+        read -r -p "请输入选项 (0-3): " choice || return 0
         echo
 
         case $choice in
@@ -120,6 +185,9 @@ main_loop() {
                 ;;
             2)
                 run_goecs
+                ;;
+            3)
+                run_yabs
                 ;;
             0)
                 log_info "返回上级菜单"
@@ -130,7 +198,7 @@ main_loop() {
                 ;;
         esac
 
-        if [ $choice -ne 0 ]; then
+        if [ "$choice" != "0" ]; then
             echo
             echo -e "${CYAN}按任意键继续...${NC}"
             read -n 1

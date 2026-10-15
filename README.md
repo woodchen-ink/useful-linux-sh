@@ -272,10 +272,10 @@ sudo ./port_forward.sh
 - 🚧 **端口冲突检查** - 同一端口不能同时被 iptables 规则、realm 规则或其他程序占用
 
 **开启 PROXY protocol 前, 目标端必须先配置接收:**
-- nginx: `listen 443 ssl proxy_protocol;` + `set_real_ip_from <中转机IP>;` + `real_ip_header proxy_protocol;`
-- Traefik: entryPoint 下 `proxyProtocol.trustedIPs` 加入中转机 IP
-- Xray / V2Ray: 入站 `streamSettings.sockopt.acceptProxyProtocol: true`
-- 只信任中转机 IP: 不在信任列表的来源发来的 PROXY 头会被当成普通数据, 连接直接失败; 信任所有来源则任何人都能伪造访客 IP
+- nginx: `listen 443 ssl proxy_protocol;` + `set_real_ip_from <中转机IP>;` + `real_ip_header proxy_protocol;`; 该端口所有连接都必须带 PROXY 头, 直连会失败
+- Traefik: entryPoint 下 `proxyProtocol.trustedIPs` 加入中转机 IP; 不在列表的来源发来的 PROXY 头会被丢弃, 连接照常可用但看到的是中转机 IP
+- Xray / V2Ray: 入站 `streamSettings.sockopt.acceptProxyProtocol: true`; 同 nginx, 不带 PROXY 头的连接会失败
+- 信任列表只放中转机 IP: 信任所有来源则任何直连者都能伪造访客 IP
 
 **配置说明：**
 - iptables 规则记录：`/etc/uls/port_forward.conf`

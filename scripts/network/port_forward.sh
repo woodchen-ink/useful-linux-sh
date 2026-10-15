@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # 端口转发管理脚本
-# 使用iptables实现端口转发功能
+# iptables: 内核 DNAT + MASQUERADE 转发, 目标看到的来源是本机 IP
+# realm:    用户态程序转发, 可通过 PROXY protocol 把访客 IP 传给目标
 
 set -e
 
@@ -15,6 +16,16 @@ NC='\033[0m'
 
 # 配置文件路径
 CONFIG_FILE="/etc/uls/port_forward.conf"
+
+# realm 配置
+# 规则以 REALM_RULES_FILE 为准, config.toml 每次由规则文件整体生成, 不要手改
+# 规则格式: 监听端口|目标主机|目标端口|协议(tcp/both)|PROXY版本(0=关闭/1/2)|备注
+REALM_VERSION="2.9.6"
+REALM_BINARY="/usr/local/bin/realm"
+REALM_CONFIG_DIR="/etc/realm"
+REALM_CONFIG_FILE="${REALM_CONFIG_DIR}/config.toml"
+REALM_SERVICE_FILE="/etc/systemd/system/realm.service"
+REALM_RULES_FILE="/etc/uls/realm_forward.conf"
 
 # 日志函数
 echo_info() {
@@ -51,6 +62,7 @@ check_requirements() {
     # 创建配置目录
     mkdir -p "$(dirname "$CONFIG_FILE")"
     touch "$CONFIG_FILE"
+    touch "$REALM_RULES_FILE"
 }
 
 # 启用IP转发
@@ -164,10 +176,13 @@ add_forward_rule() {
     # 输入源端口
     while true; do
         read -p "请输入源端口 (本机监听端口): " src_port
-        if validate_port "$src_port"; then
-            break
-        else
+        if ! validate_port "$src_port"; then
             echo_error "无效的端口号，请输入1-65535之间的数字"
+        elif realm_rule_uses_port "$src_port"; then
+            # DNAT 在 PREROUTING 先于本机程序生效, 会把 realm 的流量截走
+            echo_error "端口 $src_port 已被 realm 转发规则占用"
+        else
+            break
         fi
     done
 
@@ -585,6 +600,428 @@ import_from_iptables() {
     echo_success "成功导入 $count 条规则"
 }
 
+# ==================== realm 转发 ====================
+
+# 验证目标主机: IPv4 / IPv6 / 域名
+validate_host() {
+    local host=$1
+    local domain_regex='^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$'
+
+    validate_ip "$host" && return 0
+    [[ "$host" =~ $domain_regex ]] && return 0
+    # IPv6 只做粗校验, 真正解析交给 realm
+    [[ "$host" == *:* && "$host" =~ ^[0-9A-Fa-f:.]+$ ]] && return 0
+    return 1
+}
+
+# realm remote 字段: IPv6 需要加方括号
+format_remote() {
+    local host=$1 port=$2
+    if [[ "$host" == *:* ]]; then
+        echo "[$host]:$port"
+    else
+        echo "$host:$port"
+    fi
+}
+
+realm_rule_uses_port() {
+    [ -f "$REALM_RULES_FILE" ] || return 1
+    awk -F'|' -v p="$1" '$1 == p { found = 1 } END { exit !found }' "$REALM_RULES_FILE"
+}
+
+iptables_rule_uses_port() {
+    [ -f "$CONFIG_FILE" ] || return 1
+    awk -F'|' -v p="$1" '$3 == p { found = 1 } END { exit !found }' "$CONFIG_FILE"
+}
+
+port_is_listening() {
+    ss -lntu 2>/dev/null | awk 'NR > 1 { print $5 }' | grep -qE "[:.]$1\$"
+}
+
+realm_rule_count() {
+    grep -c . "$REALM_RULES_FILE" 2>/dev/null || true
+}
+
+realm_detect_arch() {
+    case "$(uname -m)" in
+        x86_64) echo "x86_64" ;;
+        aarch64 | arm64) echo "aarch64" ;;
+        *) return 1 ;;
+    esac
+}
+
+# 安装 realm 二进制与 systemd 服务, 已安装则跳过
+realm_install() {
+    if [ -x "$REALM_BINARY" ] && [ -f "$REALM_SERVICE_FILE" ]; then
+        return 0
+    fi
+
+    local arch
+    if ! arch=$(realm_detect_arch); then
+        echo_error "不支持的系统架构: $(uname -m) (仅支持 x86_64 / aarch64)"
+        return 1
+    fi
+
+    if [ ! -x "$REALM_BINARY" ]; then
+        echo_info "正在安装 realm v${REALM_VERSION} ($arch)..."
+
+        # musl 版为静态编译, 不依赖系统 glibc 版本
+        local url="https://github.com/zhboner/realm/releases/download/v${REALM_VERSION}/realm-${arch}-unknown-linux-musl.tar.gz"
+        local tmp_dir
+        tmp_dir=$(mktemp -d)
+
+        if ! curl -fsSL --connect-timeout 15 "$url" -o "$tmp_dir/realm.tar.gz"; then
+            echo_error "realm 下载失败, 请检查到 GitHub 的网络连接"
+            rm -rf "$tmp_dir"
+            return 1
+        fi
+        if ! tar -xzf "$tmp_dir/realm.tar.gz" -C "$tmp_dir" || [ ! -f "$tmp_dir/realm" ]; then
+            echo_error "realm 解压失败, 下载内容可能不完整"
+            rm -rf "$tmp_dir"
+            return 1
+        fi
+
+        install -m 755 "$tmp_dir/realm" "$REALM_BINARY"
+        rm -rf "$tmp_dir"
+
+        if ! "$REALM_BINARY" --version >/dev/null 2>&1; then
+            echo_error "realm 无法运行, 已删除"
+            rm -f "$REALM_BINARY"
+            return 1
+        fi
+        echo_success "realm 已安装: $("$REALM_BINARY" --version 2>&1 | head -n1)"
+    fi
+
+    mkdir -p "$REALM_CONFIG_DIR"
+    cat > "$REALM_SERVICE_FILE" <<EOF
+[Unit]
+Description=realm port forwarding (managed by ULS)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=$REALM_BINARY -c $REALM_CONFIG_FILE
+Restart=on-failure
+RestartSec=3
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload
+}
+
+# 由规则文件整体生成 config.toml
+realm_render_config() {
+    local tmp_file="${REALM_CONFIG_FILE}.tmp"
+
+    {
+        echo "# 由 ULS port_forward.sh 生成, 请通过脚本菜单修改, 手动修改会被覆盖"
+        echo ""
+        echo "[log]"
+        echo 'level = "warn"'
+        echo 'output = "stdout"'
+        echo ""
+        echo "[network]"
+        echo "no_tcp = false"
+        echo "use_udp = false"
+
+        local listen_port host port proto proxy comment
+        while IFS='|' read -r listen_port host port proto proxy comment; do
+            [ -z "$listen_port" ] && continue
+
+            local net_opts=()
+            [ "$proto" == "both" ] && net_opts+=("use_udp = true")
+            if [ "$proxy" == "1" ] || [ "$proxy" == "2" ]; then
+                net_opts+=("send_proxy = true" "send_proxy_version = $proxy")
+            fi
+
+            echo ""
+            echo "# $comment"
+            echo "[[endpoints]]"
+            echo "listen = \"0.0.0.0:$listen_port\""
+            echo "remote = \"$(format_remote "$host" "$port")\""
+            if [ ${#net_opts[@]} -gt 0 ]; then
+                local joined
+                joined=$(printf ', %s' "${net_opts[@]}")
+                echo "network = { ${joined:2} }"
+            fi
+        done < "$REALM_RULES_FILE"
+    } > "$tmp_file"
+
+    mv -f "$tmp_file" "$REALM_CONFIG_FILE"
+}
+
+# 按规则文件生成配置并重启服务; 无规则时停止服务
+realm_apply() {
+    if [ "$(realm_rule_count)" -eq 0 ]; then
+        realm_render_config
+        if systemctl is-active --quiet realm 2>/dev/null; then
+            systemctl stop realm
+        fi
+        systemctl disable realm >/dev/null 2>&1 || true
+        echo_info "已无 realm 规则, realm 服务已停止"
+        return 0
+    fi
+
+    realm_render_config
+    systemctl enable realm >/dev/null 2>&1
+    systemctl restart realm
+
+    # 配置错误时 realm 会在启动后立即退出, 稍等再判断
+    sleep 2
+    if ! systemctl is-active --quiet realm; then
+        echo_error "realm 启动失败, 最近日志:"
+        journalctl -u realm -n 15 --no-pager 2>/dev/null || true
+        return 1
+    fi
+    echo_success "realm 服务已重启"
+}
+
+# 打印目标端接收 PROXY protocol 的配置提示
+print_proxy_protocol_hint() {
+    local listen_port=$1 proxy=$2
+    local local_ip
+    local_ip=$(get_primary_ip || echo "<本机IP>")
+
+    echo ""
+    echo_warn "已开启 PROXY protocol v$proxy, 目标端口必须能解析 PROXY 头, 否则连接会失败"
+    echo_info "目标端为 nginx 时的配置示例:"
+    echo ""
+    echo -e "${CYAN}    server {${NC}"
+    echo -e "${CYAN}        listen <目标端口> ssl proxy_protocol;${NC}"
+    echo -e "${CYAN}        set_real_ip_from $local_ip;   # 只信任本中转机${NC}"
+    echo -e "${CYAN}        real_ip_header proxy_protocol;${NC}"
+    echo -e "${CYAN}        ...${NC}"
+    echo -e "${CYAN}    }${NC}"
+    echo ""
+    echo_info "Xray / V2Ray 入站: 在 streamSettings.sockopt 中设置 \"acceptProxyProtocol\": true"
+    echo_info "加了 proxy_protocol 的端口不能再被直接访问, 需要直连时请给转发单独开一个端口"
+}
+
+realm_add_rule() {
+    echo ""
+    echo_info "添加 realm 转发规则"
+    echo ""
+
+    local listen_port host port proto proxy comment
+
+    while true; do
+        read -p "请输入本机监听端口: " listen_port
+        if ! validate_port "$listen_port"; then
+            echo_error "无效的端口号，请输入1-65535之间的数字"
+        elif realm_rule_uses_port "$listen_port"; then
+            echo_error "端口 $listen_port 已有 realm 转发规则"
+        elif iptables_rule_uses_port "$listen_port"; then
+            echo_error "端口 $listen_port 已被 iptables 转发规则占用, 请先删除该规则"
+        elif port_is_listening "$listen_port"; then
+            echo_error "端口 $listen_port 已有程序在监听"
+        else
+            break
+        fi
+    done
+
+    while true; do
+        read -p "请输入目标地址 (IP 或域名): " host
+        # 去掉用户可能带上的 IPv6 方括号
+        host=${host#[}
+        host=${host%]}
+        if validate_host "$host"; then
+            break
+        fi
+        echo_error "无效的目标地址"
+    done
+
+    while true; do
+        read -p "请输入目标端口: " port
+        if validate_port "$port"; then
+            break
+        fi
+        echo_error "无效的端口号，请输入1-65535之间的数字"
+    done
+
+    echo ""
+    echo "请选择协议:"
+    echo "  1) TCP (网站选这个)"
+    echo "  2) TCP和UDP"
+    read -p "请选择 (1-2, 默认1): " proto_choice
+    case $proto_choice in
+        2) proto="both" ;;
+        *) proto="tcp" ;;
+    esac
+
+    echo ""
+    echo "是否通过 PROXY protocol 传递访客真实 IP?"
+    echo "  0) 不传递 (目标看到本机 IP, 目标端无需改动)"
+    echo "  1) PROXY protocol v1"
+    echo "  2) PROXY protocol v2 (推荐, nginx / haproxy / Xray 均支持)"
+    read -p "请选择 (0-2, 默认0): " proxy
+    case $proxy in
+        1 | 2) ;;
+        *) proxy="0" ;;
+    esac
+    if [ "$proxy" != "0" ] && [ "$proto" == "both" ]; then
+        echo_warn "PROXY protocol 只作用于 TCP, UDP 流量不会携带访客 IP"
+    fi
+
+    read -p "请输入备注 (可选): " comment
+    # 备注写入以 | 分隔的规则文件, 不能含分隔符
+    comment=${comment//|/ }
+    comment=${comment:-"realm forward"}
+
+    local proxy_text="关闭"
+    [ "$proxy" != "0" ] && proxy_text="v$proxy"
+
+    echo ""
+    echo_info "配置摘要:"
+    echo "  监听: 0.0.0.0:$listen_port"
+    echo "  目标: $(format_remote "$host" "$port")"
+    echo "  协议: $proto"
+    echo "  PROXY protocol: $proxy_text"
+    echo "  备注: $comment"
+    echo ""
+
+    read -p "确认添加? (y/N): " confirm
+    if [[ ! $confirm =~ ^[Yy] ]]; then
+        echo_warn "已取消"
+        return 0
+    fi
+
+    realm_install || return 1
+
+    echo "$listen_port|$host|$port|$proto|$proxy|$comment" >> "$REALM_RULES_FILE"
+
+    if ! realm_apply; then
+        # 回滚刚加入的规则, 避免一条坏规则拖垮其他转发
+        echo_warn "正在回滚该规则..."
+        sed -i '$d' "$REALM_RULES_FILE"
+        realm_apply || true
+        return 1
+    fi
+
+    echo ""
+    echo_success "realm 转发已添加: 0.0.0.0:$listen_port -> $(format_remote "$host" "$port") ($proto)"
+
+    if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
+        echo_warn "检测到 UFW 已启用, realm 是本机监听, 需放行端口: ufw allow $listen_port"
+    fi
+
+    [ "$proxy" != "0" ] && print_proxy_protocol_hint "$listen_port" "$proxy"
+    return 0
+}
+
+realm_list_rules() {
+    echo ""
+    echo_info "realm 转发规则"
+    echo ""
+
+    if [ "$(realm_rule_count)" -eq 0 ]; then
+        echo_warn "暂无 realm 转发规则"
+        return 0
+    fi
+
+    printf "${YELLOW}%-4s %-8s %-30s %-6s %-7s %s${NC}\n" "No" "监听" "目标" "协议" "PROXY" "备注"
+    echo "--------------------------------------------------------------------------------"
+
+    local index=1
+    local listen_port host port proto proxy comment
+    while IFS='|' read -r listen_port host port proto proxy comment; do
+        [ -z "$listen_port" ] && continue
+        local proxy_text="-"
+        [ "$proxy" == "1" ] || [ "$proxy" == "2" ] && proxy_text="v$proxy"
+        printf "%-4s %-8s %-30s %-6s %-7s %s\n" \
+            "$index" "$listen_port" "$(format_remote "$host" "$port")" "$proto" "$proxy_text" "$comment"
+        index=$((index + 1))
+    done < "$REALM_RULES_FILE"
+
+    echo ""
+    if systemctl is-active --quiet realm 2>/dev/null; then
+        echo_info "realm 服务: ${GREEN}运行中${NC}"
+    else
+        echo_warn "realm 服务: 未运行 (可在菜单中查看服务状态)"
+    fi
+}
+
+realm_delete_rule() {
+    local total
+    total=$(realm_rule_count)
+    if [ "$total" -eq 0 ]; then
+        echo ""
+        echo_warn "暂无 realm 转发规则可删除"
+        return 0
+    fi
+
+    realm_list_rules
+    echo ""
+    read -p "请输入要删除的规则编号 (1-$total): " rule_num
+
+    if ! [[ "$rule_num" =~ ^[0-9]+$ ]] || [ "$rule_num" -lt 1 ] || [ "$rule_num" -gt "$total" ]; then
+        echo_error "无效的规则编号"
+        return 1
+    fi
+
+    # 规则文件可能含空行, 按非空行序号定位真实行号
+    local line_no
+    line_no=$(grep -n . "$REALM_RULES_FILE" | sed -n "${rule_num}p" | cut -d: -f1)
+
+    local listen_port host port proto proxy comment
+    IFS='|' read -r listen_port host port proto proxy comment < <(sed -n "${line_no}p" "$REALM_RULES_FILE")
+
+    echo ""
+    echo_info "将删除: 0.0.0.0:$listen_port -> $(format_remote "$host" "$port") ($proto) $comment"
+    read -p "确认删除? (y/N): " confirm
+    if [[ ! $confirm =~ ^[Yy] ]]; then
+        echo_warn "已取消"
+        return 0
+    fi
+
+    sed -i "${line_no}d" "$REALM_RULES_FILE"
+    realm_apply
+    echo_success "规则已删除"
+}
+
+realm_show_status() {
+    echo ""
+    if [ ! -x "$REALM_BINARY" ]; then
+        echo_warn "realm 未安装, 添加第一条 realm 转发时会自动安装"
+        return 0
+    fi
+
+    echo_info "版本: $("$REALM_BINARY" --version 2>&1 | head -n1)"
+    echo_info "规则数: $(realm_rule_count)"
+    echo_info "配置文件: $REALM_CONFIG_FILE"
+    echo ""
+    systemctl status realm --no-pager -l 2>/dev/null | head -n 15 || true
+    echo ""
+    echo_info "最近日志:"
+    journalctl -u realm -n 10 --no-pager 2>/dev/null || true
+}
+
+realm_uninstall() {
+    echo ""
+    if [ ! -x "$REALM_BINARY" ] && [ ! -f "$REALM_SERVICE_FILE" ]; then
+        echo_warn "realm 未安装"
+        return 0
+    fi
+
+    echo_warn "将停止 realm 服务, 删除程序、服务与全部 $(realm_rule_count) 条 realm 转发规则"
+    read -p "确认卸载? (输入 'yes' 确认): " confirm
+    if [ "$confirm" != "yes" ]; then
+        echo_warn "已取消"
+        return 0
+    fi
+
+    systemctl stop realm 2>/dev/null || true
+    systemctl disable realm >/dev/null 2>&1 || true
+    rm -f "$REALM_SERVICE_FILE" "$REALM_BINARY"
+    rm -rf "$REALM_CONFIG_DIR"
+    : > "$REALM_RULES_FILE"
+    systemctl daemon-reload
+
+    echo_success "realm 已卸载"
+}
+
 # 显示菜单
 show_menu() {
     echo ""
@@ -592,12 +1029,21 @@ show_menu() {
     echo -e "${CYAN}║${NC}      ${YELLOW}端口转发管理${NC}              ${CYAN}║${NC}"
     echo -e "${CYAN}╚════════════════════════════════════════╝${NC}"
     echo ""
+    echo -e "  ${YELLOW}[iptables 内核转发]${NC} 开销最低, 目标看到的来源是本机 IP"
     echo -e "  ${BLUE}1.${NC} 添加转发规则"
     echo -e "  ${BLUE}2.${NC} 列出转发规则"
     echo -e "  ${BLUE}3.${NC} 删除转发规则"
     echo -e "  ${BLUE}4.${NC} 清空所有规则"
     echo -e "  ${BLUE}5.${NC} 恢复保存的规则"
     echo -e "  ${BLUE}6.${NC} 从iptables导入规则"
+    echo ""
+    echo -e "  ${YELLOW}[realm 程序转发]${NC} 支持域名目标, 可通过 PROXY protocol 传递访客 IP"
+    echo -e "  ${BLUE}7.${NC} 添加 realm 转发"
+    echo -e "  ${BLUE}8.${NC} 列出 realm 转发"
+    echo -e "  ${BLUE}9.${NC} 删除 realm 转发"
+    echo -e "  ${BLUE}10.${NC} realm 服务状态"
+    echo -e "  ${BLUE}11.${NC} 卸载 realm"
+    echo ""
     echo -e "  ${RED}0.${NC} 返回主菜单"
     echo ""
 }
@@ -609,7 +1055,7 @@ main() {
 
     while true; do
         show_menu
-        read -p "请选择 (0-6): " choice
+        read -p "请选择 (0-11): " choice
 
         case $choice in
             1)
@@ -629,6 +1075,21 @@ main() {
                 ;;
             6)
                 import_from_iptables
+                ;;
+            7)
+                realm_add_rule || true
+                ;;
+            8)
+                realm_list_rules
+                ;;
+            9)
+                realm_delete_rule || true
+                ;;
+            10)
+                realm_show_status
+                ;;
+            11)
+                realm_uninstall
                 ;;
             0)
                 echo ""

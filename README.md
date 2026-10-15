@@ -250,6 +250,40 @@ sudo ./ipv6_manager.sh
 - GRUB配置文件：`/etc/default/grub`
 - 所有修改前都会自动备份，带时间戳
 
+#### 🔀 端口转发管理工具
+同一个菜单管理两种转发方式: iptables 内核转发与 realm 程序转发。
+
+```bash
+wget -O port_forward.sh https://i.czl.net/uls/scripts/network/port_forward.sh
+chmod +x port_forward.sh
+sudo ./port_forward.sh
+```
+
+| 方式 | 原理 | 目标看到的来源 IP | 适用场景 |
+|------|------|------------------|---------|
+| iptables | 内核 DNAT + MASQUERADE | 中转机 IP | 固定 IP / 端口的纯转发, 开销最低 |
+| realm | 程序接收连接后再连目标 | 开启 PROXY protocol 时为访客真实 IP | 网站等需要访客 IP 的转发, 支持域名目标 |
+
+**realm 转发：**
+- ➕ **添加** - 首次添加时自动安装 realm (musl 静态版) 与 `realm.service`, 可选 TCP 或 TCP+UDP
+- 🛰️ **PROXY protocol** - 可选 v1 / v2, 把访客 IP 传给目标; 只作用于 TCP, UDP 不携带访客 IP
+- 📋 **列出 / 删除** - 按编号删除, 删到 0 条时自动停止服务
+- 🔙 **失败回滚** - 新规则导致 realm 启动失败时自动撤回该规则
+- 🚧 **端口冲突检查** - 同一端口不能同时被 iptables 规则、realm 规则或其他程序占用
+
+**开启 PROXY protocol 前, 目标端必须先配置接收:**
+- nginx: `listen 443 ssl proxy_protocol;` + `set_real_ip_from <中转机IP>;` + `real_ip_header proxy_protocol;`
+- Traefik: entryPoint 下 `proxyProtocol.trustedIPs` 加入中转机 IP
+- Xray / V2Ray: 入站 `streamSettings.sockopt.acceptProxyProtocol: true`
+- 只信任中转机 IP: 不在信任列表的来源发来的 PROXY 头会被当成普通数据, 连接直接失败; 信任所有来源则任何人都能伪造访客 IP
+
+**配置说明：**
+- iptables 规则记录：`/etc/uls/port_forward.conf`
+- realm 规则记录：`/etc/uls/realm_forward.conf` (以此为准)
+- realm 配置：`/etc/realm/config.toml` (由规则记录生成, 手改会被覆盖)
+- realm 服务：`/etc/systemd/system/realm.service`, 日志 `journalctl -u realm`
+- UFW 启用时需放行 realm 监听端口 (realm 走 INPUT 链, 不走 FORWARD)
+
 #### 🔌 GOST代理管理工具
 一键安装、配置和管理GOST代理服务，支持HTTP/HTTPS和SOCKS5协议，使用systemd进行服务管理。
 

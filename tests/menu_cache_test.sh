@@ -95,3 +95,13 @@ if run_script setup_v2bx.sh; then exit 1; fi
 cmp "$TMP/stale-original" "$CONFIG_DIR/scripts/setup_v2bx.sh"
 unset -f chmod
 echo 'PASS: chmod/mv failures preserve cache and never execute stale script'
+# 使用 workflow 中的实际 sed 表达式,防止未来发布再次改写函数内赋值。
+version_sed=$(grep 'sed -i.*SCRIPT_VERSION=' "$ROOT/.github/workflows/release.yml" | cut -d "'" -f2)
+[[ -n "$version_sed" && "$version_sed" != *$'\n'* ]]
+version_sed=${version_sed//'${{ steps.version.outputs.version }}'/9.8.7}
+sed "$version_sed" "$ROOT/uls.sh" > "$TMP/release-uls.sh"
+grep -qx 'SCRIPT_VERSION="9.8.7"' "$TMP/release-uls.sh"
+grep -Fq '( SCRIPT_VERSION="$latest_version"; sync_script_cache )' "$TMP/release-uls.sh"
+cmp <(grep -v '^SCRIPT_VERSION=' "$ROOT/uls.sh") <(grep -v '^SCRIPT_VERSION=' "$TMP/release-uls.sh")
+bash -n "$TMP/release-uls.sh"
+echo 'PASS: release version substitution preserves dynamic function assignment'

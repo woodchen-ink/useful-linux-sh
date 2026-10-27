@@ -59,7 +59,7 @@ jobs:
     - name: Update version in uls.sh
       run: |
         # 更新uls.sh中的版本号
-        sed -i 's/SCRIPT_VERSION="[^"]*"/SCRIPT_VERSION="${{ steps.version.outputs.version }}"/' uls.sh
+        sed -i 's/^SCRIPT_VERSION="[^"]*"/SCRIPT_VERSION="${{ steps.version.outputs.version }}"/' uls.sh
         sed -i 's/# 版本: [0-9.]*/# 版本: ${{ steps.version.outputs.version }}/' uls.sh
         echo "✅ 已更新uls.sh版本号为 ${{ steps.version.outputs.version }}"
 

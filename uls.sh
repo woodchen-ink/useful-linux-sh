@@ -615,7 +615,7 @@ check_version_update() {
                 rm -f "$temp_file"
 
                 # 仅在主脚本写入并回读成功后清理子脚本缓存
-                ( SCRIPT_VERSION="2.3.0"; sync_script_cache )
+                ( SCRIPT_VERSION="$latest_version"; sync_script_cache )
 
                 # 清理旧备份
                 clean_old_backups

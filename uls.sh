@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # ULS - Useful Linux Scripts 统一管理脚本
-# 版本: 2.2.6
+# 版本: 2.3.0
 # 作者: woodchen-ink
 
 # 配置信息
-SCRIPT_VERSION="2.2.6"
+SCRIPT_VERSION="2.3.0"
 SCRIPT_NAME="uls.sh"
 SCRIPT_URL="https://i.czl.net/uls"
 INSTALL_DIR="/usr/local/bin"
@@ -92,21 +92,28 @@ download_script() {
         return 1
     fi
 
-    # 校验通过后再重命名为正式文件名,避免损坏的内容覆盖可用脚本
-    mv -f "$tmp_path" "$local_path"
-    chmod +x "$local_path"
+    # 先在临时文件设置权限;权限或替换失败时保留旧缓存但禁止执行。
+    if ! chmod +x "$tmp_path"; then
+        log_error "$script_name 无法设置执行权限,已放弃"
+        rm -f "$tmp_path"
+        return 1
+    fi
+    if ! mv -f "$tmp_path" "$local_path"; then
+        log_error "$script_name 无法替换缓存,已放弃"
+        rm -f "$tmp_path"
+        return 1
+    fi
     log_success "$script_name 下载完成"
     return 0
 }
 
-# 执行脚本函数 - 每次都重新下载最新版本
+# 执行脚本函数 - 校验下载成功后才替换旧文件
 run_script() {
     local script_name="$1"
     local local_path="$CONFIG_DIR/scripts/$script_name"
 
     # 每次都重新下载最新版本
     log_info "正在下载最新版本的 $script_name..."
-    rm -f "$local_path"  # 删除旧版本
 
     case $script_name in
         "add-swap.sh")
@@ -126,6 +133,9 @@ run_script() {
             ;;
         "migrate_volumes.sh")
             download_script "$script_name" "scripts/docker/migrate_volumes.sh" || return 1
+            ;;
+        "setup_xboard_node.sh")
+            download_script "$script_name" "scripts/proxy/setup_xboard_node.sh" || return 1
             ;;
         "setup_v2bx.sh")
             download_script "$script_name" "scripts/proxy/setup_v2bx.sh" || return 1
@@ -177,6 +187,47 @@ run_script() {
     bash "$local_path"
 }
 
+# 只负责后端选择,两个后端独立安装与管理,不做自动迁移。
+proxy_node_menu() {
+    local backend
+    while true; do
+        echo
+        echo -e "${CYAN}代理节点管理${NC}"
+        echo "1) V2bX          - 原有安装 / 卸载 / 状态管理"
+        echo "2) Xboard-Node   - 安装 / 升级 / 追加与删除绑定"
+        echo "0) 返回主菜单"
+        read -r -p "请选择 (0-2): " backend || return 0
+        case "$backend" in
+            1) run_script "setup_v2bx.sh" ;;
+            2) run_script "setup_xboard_node.sh" ;;
+            0) return 0 ;;
+            *) log_error "无效选择" ;;
+        esac
+    done
+}
+
+# 主版本变更时使子脚本缓存失效;不触及后端程序、配置、证书或主脚本备份。
+# 新版启动也执行:兼容旧版本更新器不调用本函数以及手动覆盖主脚本。
+sync_script_cache() {
+    local marker="$CONFIG_DIR/scripts/.uls-version"
+    local cached_version=""
+    if [ -f "$marker" ]; then
+        read -r cached_version < "$marker" || true
+    fi
+    if [ "$cached_version" = "$SCRIPT_VERSION" ]; then
+        return 0
+    fi
+    if ! find "$CONFIG_DIR/scripts" -maxdepth 1 -type f \( -name '*.sh' -o -name '*.sh.tmp' \) -delete; then
+        log_warn "子脚本缓存清理失败,下次启动将重试"
+        return 1
+    fi
+    if ! printf '%s\n' "$SCRIPT_VERSION" > "$marker"; then
+        log_warn "无法记录子脚本缓存版本,下次启动将重试"
+        return 1
+    fi
+    log_success "已清理旧版子菜单脚本缓存 (v$SCRIPT_VERSION),下次进入时重新下载"
+}
+
 # 显示主菜单
 show_menu() {
     # 只有在交互式终端时才清屏
@@ -202,7 +253,7 @@ show_menu() {
     echo -e "${WHITE}  ${BLUE}9.${NC} ${GREEN}🔌 GOST代理管理${NC}     - HTTP/SOCKS5代理服务"
     echo -e "${WHITE}  ${BLUE}10.${NC} ${GREEN}☁️  WARP代理管理${NC}     - Cloudflare WARP代理"
     echo -e "${WHITE}  ${BLUE}11.${NC} ${GREEN}🐳 Docker Volumes迁移${NC} - 跨服务器迁移Docker卷"
-    echo -e "${WHITE}  ${BLUE}12.${NC} ${GREEN}🚄 V2bX节点管理${NC}     - V2board节点服务端管理"
+    echo -e "${WHITE}  ${BLUE}12.${NC} ${GREEN}🚄 代理节点管理${NC}     - V2bX / Xboard-Node 双脚本选择"
     echo -e "${WHITE}  ${BLUE}13.${NC} ${GREEN}📦 GeoIP/GeoSite更新${NC} - 更新geoip和geosite规则"
     echo -e "${WHITE}  ${BLUE}14.${NC} ${GREEN}📊 服务器性能测试${NC}   - 综合性能和网络测试"
     echo -e "${WHITE}  ${BLUE}15.${NC} ${GREEN}🔑 SSH端口修改${NC}      - 修改SSH服务监听端口"
@@ -427,7 +478,7 @@ main_loop() {
                 ;;
             12)
                 echo
-                run_script "setup_v2bx.sh"
+                proxy_node_menu
                 ;;
             13)
                 echo
@@ -507,7 +558,7 @@ check_version_update() {
 
         local temp_file="/tmp/uls_new.sh"
         local download_success=false
-        local release_url="https://github.com/woodchen-ink/useful-linux-sh/releases/download/$latest_version/uls.sh"
+        local release_url="https://github.com/woodchen-ink/useful-linux-sh/releases/download/v$latest_version/uls.sh"
 
         # 从GitHub Release下载，如果失败则从主分支下载
         if curl -fsSL "$release_url" -o "$temp_file" 2>/dev/null; then
@@ -563,6 +614,9 @@ check_version_update() {
 
                 rm -f "$temp_file"
 
+                # 仅在主脚本写入并回读成功后清理子脚本缓存
+                ( SCRIPT_VERSION="$latest_version"; sync_script_cache )
+
                 # 清理旧备份
                 clean_old_backups
 
@@ -594,6 +648,7 @@ initialize() {
 
     # 设置目录
     setup_directories
+    sync_script_cache
 
     # 如果是首次运行，询问是否安装到系统
     if [ ! -f "$INSTALL_DIR/uls" ] && [ "$0" != "$INSTALL_DIR/uls" ]; then

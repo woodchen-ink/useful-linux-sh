@@ -27,7 +27,7 @@ curl -fsSL https://raw.githubusercontent.com/woodchen-ink/useful-linux-sh/refs/h
 **ULS工具箱功能：**
 - 🎯 交互式菜单，操作简单直观
 - 📥 每次执行都下载最新脚本版本，确保功能最新
-- 🔄 基于GitHub Release的自动版本管理
+- 🔄 基于GitHub Release的自动版本管理;主版本变更后自动清理子菜单脚本缓存,不触及已安装服务与配置
 - 🔔 启动时自动检测新版本，智能提示更新
 - 🤖 GitHub Actions自动测试和发布
 - 🗑️ 完整卸载功能，干净移除所有文件
@@ -407,6 +407,25 @@ sudo ./migrate_volumes.sh
 - 多环境之间同步Docker volumes
 
 ### 🚄 代理节点管理脚本
+
+主菜单 **12. 代理节点管理** 可选择 **V2bX** 或 **Xboard-Node**,两者独立管理,不自动迁移配置。
+
+#### Xboard-Node 节点管理脚本
+
+通过官方 `dev/install.sh` 安装和升级,通过 `xbctl` 增删绑定,避免为追加节点重新生成整份配置。官方安装方式要求 Linux systemd。
+
+```bash
+wget -O setup_xboard_node.sh https://i.czl.net/uls/scripts/proxy/setup_xboard_node.sh
+sudo bash setup_xboard_node.sh
+```
+
+- 首次安装:交互输入面板地址、隐藏 Token、节点或机器 ID,选择 sing-box / Xray 内核。
+- 已有安装:禁止重复安装,使用专用升级入口保留配置;追加绑定调用 `xbctl bind add-node` / `add-machine`。
+- 管理:查看实例与状态、删除指定面板的节点绑定、重启服务。
+- 卸载:使用官方卸载动作,默认保留配置;输入 `purge` 才删除配置、密钥与备份。
+- 配置: `/etc/xboard-node/config.yml`;管理命令: `/usr/local/bin/xbctl`。
+- 不自动卸载 V2bX 或迁移旧节点;同机运行需确认端口无冲突。机器模式需面板支持对应接口。
+- 项目: https://github.com/cedar2025/Xboard-Node
 
 #### 🚄 V2bX节点管理脚本
 一键安装和管理V2bX (V2board节点服务端),安装走上游官方脚本确保功能最新;启动后弹出菜单可选安装/卸载/查看状态,卸载会自动检测已安装组件、停止进程并删除服务与文件。

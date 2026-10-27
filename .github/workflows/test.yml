@@ -78,6 +78,9 @@ jobs:
 
         echo "✅ ULS基本功能测试通过"
 
+    - name: Test proxy menus and cache invalidation
+      run: bash tests/menu_cache_test.sh
+
     - name: Test script download URLs
       run: |
         echo "🔍 测试脚本下载URL..."

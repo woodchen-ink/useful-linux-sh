@@ -2,7 +2,7 @@
 
 # 端口转发管理脚本
 # iptables: 内核 DNAT + MASQUERADE 转发, 目标看到的来源是本机 IP
-# realm:    用户态程序转发, 可通过 PROXY protocol 把访客 IP 传给目标
+# realm:    用户态程序转发, 可通过 PROXY protocol 把访客 IP 传给目标, 支持 IPv4/IPv6/双栈监听
 
 set -e
 
@@ -19,7 +19,8 @@ CONFIG_FILE="/etc/uls/port_forward.conf"
 
 # realm 配置
 # 规则以 REALM_RULES_FILE 为准, config.toml 每次由规则文件整体生成, 不要手改
-# 规则格式: 监听端口|目标主机|目标端口|协议(tcp/both)|PROXY版本(0=关闭/1/2)|备注
+# 规则格式: 监听端口|目标主机|目标端口|协议(tcp/both)|PROXY版本(0=关闭/1/2)|备注|监听栈(v4/v6/dual)
+# 监听栈字段为后加, 旧规则缺省按 v4 处理
 REALM_VERSION="2.9.6"
 REALM_BINARY="/usr/local/bin/realm"
 REALM_CONFIG_DIR="/etc/realm"
@@ -642,6 +643,62 @@ realm_rule_count() {
     grep -c . "$REALM_RULES_FILE" 2>/dev/null || true
 }
 
+# 规范化监听栈, 旧规则无该字段时按 v4
+normalize_stack() {
+    case $1 in
+        v6 | dual) echo "$1" ;;
+        *) echo "v4" ;;
+    esac
+}
+
+# 监听地址展示文本
+stack_listen_text() {
+    local stack=$1 listen_port=$2
+    case $stack in
+        v6) echo "[::]:$listen_port" ;;
+        dual) echo "0.0.0.0+[::]:$listen_port" ;;
+        *) echo "0.0.0.0:$listen_port" ;;
+    esac
+}
+
+# 本机是否启用了 IPv6 (内核支持且未被 sysctl 禁用)
+system_has_ipv6() {
+    [ -f /proc/net/if_inet6 ] || return 1
+    [ "$(cat /proc/sys/net/ipv6/conf/all/disable_ipv6 2>/dev/null || echo 0)" != "1" ]
+}
+
+# 本机是否有全局 IPv6 地址, 没有时外部无法经 IPv6 访问
+system_has_global_ipv6() {
+    ip -6 addr show scope global 2>/dev/null | grep -q "inet6"
+}
+
+# 选择监听栈, 结果写入全局变量 REALM_STACK_CHOICE
+choose_listen_stack() {
+    local default=${1:-v4}
+    local default_num=1
+    case $default in
+        v6) default_num=2 ;;
+        dual) default_num=3 ;;
+    esac
+
+    echo ""
+    echo "请选择本机监听方式:"
+    echo "  1) 仅 IPv4 (0.0.0.0)"
+    echo "  2) 仅 IPv6 ([::])"
+    echo "  3) IPv4 + IPv6 双栈"
+    if ! system_has_ipv6; then
+        echo_warn "本机未启用 IPv6, 选择 2/3 会导致 realm 启动失败"
+    elif ! system_has_global_ipv6; then
+        echo_warn "本机没有公网 IPv6 地址, IPv6 监听只能在内网访问"
+    fi
+    read -p "请选择 (1-3, 默认$default_num): " stack_choice
+    case ${stack_choice:-$default_num} in
+        2) REALM_STACK_CHOICE="v6" ;;
+        3) REALM_STACK_CHOICE="dual" ;;
+        *) REALM_STACK_CHOICE="v4" ;;
+    esac
+}
+
 realm_detect_arch() {
     case "$(uname -m)" in
         x86_64) echo "x86_64" ;;
@@ -712,6 +769,23 @@ EOF
     systemctl daemon-reload
 }
 
+# 输出单个 endpoint: 备注 监听地址 目标地址 [network 选项...]
+realm_render_endpoint() {
+    local comment=$1 listen=$2 remote=$3
+    shift 3
+
+    echo ""
+    echo "# $comment"
+    echo "[[endpoints]]"
+    echo "listen = \"$listen\""
+    echo "remote = \"$remote\""
+    if [ $# -gt 0 ]; then
+        local joined
+        joined=$(printf ', %s' "$@")
+        echo "network = { ${joined:2} }"
+    fi
+}
+
 # 由规则文件整体生成 config.toml
 realm_render_config() {
     local tmp_file="${REALM_CONFIG_FILE}.tmp"
@@ -727,9 +801,10 @@ realm_render_config() {
         echo "no_tcp = false"
         echo "use_udp = false"
 
-        local listen_port host port proto proxy comment
-        while IFS='|' read -r listen_port host port proto proxy comment; do
+        local listen_port host port proto proxy comment stack
+        while IFS='|' read -r listen_port host port proto proxy comment stack; do
             [ -z "$listen_port" ] && continue
+            stack=$(normalize_stack "$stack")
 
             local net_opts=()
             [ "$proto" == "both" ] && net_opts+=("use_udp = true")
@@ -737,15 +812,16 @@ realm_render_config() {
                 net_opts+=("send_proxy = true" "send_proxy_version = $proxy")
             fi
 
-            echo ""
-            echo "# $comment"
-            echo "[[endpoints]]"
-            echo "listen = \"0.0.0.0:$listen_port\""
-            echo "remote = \"$(format_remote "$host" "$port")\""
-            if [ ${#net_opts[@]} -gt 0 ]; then
-                local joined
-                joined=$(printf ', %s' "${net_opts[@]}")
-                echo "network = { ${joined:2} }"
+            local remote
+            remote=$(format_remote "$host" "$port")
+
+            # 双栈拆成两个 endpoint: IPv6 端点关闭 v4-mapped, 避免与 0.0.0.0 抢端口,
+            # 也让 IPv4 访客在 PROXY 头里保持原始 IPv4 而不是 ::ffff:x.x.x.x
+            if [ "$stack" == "v4" ] || [ "$stack" == "dual" ]; then
+                realm_render_endpoint "$comment" "0.0.0.0:$listen_port" "$remote" "${net_opts[@]}"
+            fi
+            if [ "$stack" == "v6" ] || [ "$stack" == "dual" ]; then
+                realm_render_endpoint "$comment (IPv6)" "[::]:$listen_port" "$remote" "${net_opts[@]}" "ipv6_only = true"
             fi
         done < "$REALM_RULES_FILE"
     } > "$tmp_file"
@@ -805,7 +881,7 @@ realm_add_rule() {
     echo_info "添加 realm 转发规则"
     echo ""
 
-    local listen_port host port proto proxy comment
+    local listen_port host port proto proxy comment stack
 
     while true; do
         read -p "请输入本机监听端口: " listen_port
@@ -841,6 +917,9 @@ realm_add_rule() {
         echo_error "无效的端口号，请输入1-65535之间的数字"
     done
 
+    choose_listen_stack v4
+    stack=$REALM_STACK_CHOICE
+
     echo ""
     echo "请选择协议:"
     echo "  1) TCP (网站选这个)"
@@ -875,7 +954,7 @@ realm_add_rule() {
 
     echo ""
     echo_info "配置摘要:"
-    echo "  监听: 0.0.0.0:$listen_port"
+    echo "  监听: $(stack_listen_text "$stack" "$listen_port")"
     echo "  目标: $(format_remote "$host" "$port")"
     echo "  协议: $proto"
     echo "  PROXY protocol: $proxy_text"
@@ -890,7 +969,7 @@ realm_add_rule() {
 
     realm_install || return 1
 
-    echo "$listen_port|$host|$port|$proto|$proxy|$comment" >> "$REALM_RULES_FILE"
+    echo "$listen_port|$host|$port|$proto|$proxy|$comment|$stack" >> "$REALM_RULES_FILE"
 
     if ! realm_apply; then
         # 回滚刚加入的规则, 避免一条坏规则拖垮其他转发
@@ -901,7 +980,7 @@ realm_add_rule() {
     fi
 
     echo ""
-    echo_success "realm 转发已添加: 0.0.0.0:$listen_port -> $(format_remote "$host" "$port") ($proto)"
+    echo_success "realm 转发已添加: $(stack_listen_text "$stack" "$listen_port") -> $(format_remote "$host" "$port") ($proto)"
 
     if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
         echo_warn "检测到 UFW 已启用, realm 是本机监听, 需放行端口: ufw allow $listen_port"
@@ -921,17 +1000,18 @@ realm_list_rules() {
         return 0
     fi
 
-    printf "${YELLOW}%-4s %-8s %-30s %-6s %-7s %s${NC}\n" "No" "监听" "目标" "协议" "PROXY" "备注"
-    echo "--------------------------------------------------------------------------------"
+    printf "${YELLOW}%-4s %-8s %-6s %-30s %-6s %-7s %s${NC}\n" "No" "监听" "栈" "目标" "协议" "PROXY" "备注"
+    echo "---------------------------------------------------------------------------------------"
 
     local index=1
-    local listen_port host port proto proxy comment
-    while IFS='|' read -r listen_port host port proto proxy comment; do
+    local listen_port host port proto proxy comment stack
+    while IFS='|' read -r listen_port host port proto proxy comment stack; do
         [ -z "$listen_port" ] && continue
+        stack=$(normalize_stack "$stack")
         local proxy_text="-"
         [ "$proxy" == "1" ] || [ "$proxy" == "2" ] && proxy_text="v$proxy"
-        printf "%-4s %-8s %-30s %-6s %-7s %s\n" \
-            "$index" "$listen_port" "$(format_remote "$host" "$port")" "$proto" "$proxy_text" "$comment"
+        printf "%-4s %-8s %-6s %-30s %-6s %-7s %s\n" \
+            "$index" "$listen_port" "$stack" "$(format_remote "$host" "$port")" "$proto" "$proxy_text" "$comment"
         index=$((index + 1))
     done < "$REALM_RULES_FILE"
 
@@ -965,11 +1045,12 @@ realm_delete_rule() {
     local line_no
     line_no=$(grep -n . "$REALM_RULES_FILE" | sed -n "${rule_num}p" | cut -d: -f1)
 
-    local listen_port host port proto proxy comment
-    IFS='|' read -r listen_port host port proto proxy comment < <(sed -n "${line_no}p" "$REALM_RULES_FILE")
+    local listen_port host port proto proxy comment stack
+    IFS='|' read -r listen_port host port proto proxy comment stack < <(sed -n "${line_no}p" "$REALM_RULES_FILE")
+    stack=$(normalize_stack "$stack")
 
     echo ""
-    echo_info "将删除: 0.0.0.0:$listen_port -> $(format_remote "$host" "$port") ($proto) $comment"
+    echo_info "将删除: $(stack_listen_text "$stack" "$listen_port") -> $(format_remote "$host" "$port") ($proto) $comment"
     read -p "确认删除? (y/N): " confirm
     if [[ ! $confirm =~ ^[Yy] ]]; then
         echo_warn "已取消"
@@ -979,6 +1060,86 @@ realm_delete_rule() {
     sed -i "${line_no}d" "$REALM_RULES_FILE"
     realm_apply
     echo_success "规则已删除"
+}
+
+# 修改已有规则的监听栈, 可单条修改或把全部仅 IPv4 规则升级为双栈
+realm_change_stack() {
+    local total
+    total=$(realm_rule_count)
+    if [ "$total" -eq 0 ]; then
+        echo ""
+        echo_warn "暂无 realm 转发规则"
+        return 0
+    fi
+
+    realm_list_rules
+    echo ""
+    echo "  输入 a: 全部仅 IPv4 的规则加上 IPv6 (改为双栈)"
+    read -p "请输入要修改的规则编号 (1-$total) 或 a: " rule_num
+
+    local backup_file="${REALM_RULES_FILE}.bak"
+
+    if [[ "$rule_num" == "a" || "$rule_num" == "A" ]]; then
+        local v4_count
+        v4_count=$(awk -F'|' 'NF && ($7 == "" || $7 == "v4") { n++ } END { print n + 0 }' "$REALM_RULES_FILE")
+        if [ "$v4_count" -eq 0 ]; then
+            echo_warn "没有仅 IPv4 监听的规则"
+            return 0
+        fi
+        system_has_ipv6 || echo_warn "本机未启用 IPv6, 修改后 realm 很可能启动失败 (会自动回滚)"
+        read -p "将把 $v4_count 条仅 IPv4 规则改为双栈监听, 确认? (y/N): " confirm
+        if [[ ! $confirm =~ ^[Yy] ]]; then
+            echo_warn "已取消"
+            return 0
+        fi
+        cp -f "$REALM_RULES_FILE" "$backup_file"
+        # 旧规则只有 6 段, 补上第 7 段; 已是 v6/dual 的保持不变
+        awk -F'|' -v OFS='|' 'NF { if ($7 == "" || $7 == "v4") $7 = "dual" } { print }' \
+            "$backup_file" > "$REALM_RULES_FILE"
+    else
+        if ! [[ "$rule_num" =~ ^[0-9]+$ ]] || [ "$rule_num" -lt 1 ] || [ "$rule_num" -gt "$total" ]; then
+            echo_error "无效的规则编号"
+            return 1
+        fi
+
+        local line_no
+        line_no=$(grep -n . "$REALM_RULES_FILE" | sed -n "${rule_num}p" | cut -d: -f1)
+
+        local listen_port host port proto proxy comment stack
+        IFS='|' read -r listen_port host port proto proxy comment stack < <(sed -n "${line_no}p" "$REALM_RULES_FILE")
+        stack=$(normalize_stack "$stack")
+
+        echo ""
+        echo_info "当前监听: $(stack_listen_text "$stack" "$listen_port") -> $(format_remote "$host" "$port")"
+        # 默认值给最常见的需求: 旧 IPv4 规则加上 IPv6
+        local suggest=$stack
+        [ "$stack" == "v4" ] && suggest="dual"
+        choose_listen_stack "$suggest"
+
+        if [ "$REALM_STACK_CHOICE" == "$stack" ]; then
+            echo_warn "监听方式未变化"
+            return 0
+        fi
+
+        cp -f "$REALM_RULES_FILE" "$backup_file"
+        awk -F'|' -v OFS='|' -v n="$line_no" -v s="$REALM_STACK_CHOICE" \
+            'NR == n { $7 = s } { print }' "$backup_file" > "$REALM_RULES_FILE"
+    fi
+
+    if ! realm_apply; then
+        echo_warn "正在回滚监听修改..."
+        mv -f "$backup_file" "$REALM_RULES_FILE"
+        realm_apply || true
+        return 1
+    fi
+    rm -f "$backup_file"
+    echo_success "监听方式已更新"
+
+    if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "Status: active"; then
+        if ! grep -qE '^IPV6=yes' /etc/default/ufw 2>/dev/null; then
+            echo_warn "UFW 未开启 IPv6 (/etc/default/ufw 中 IPV6=yes), IPv6 端口放行不会生效"
+        fi
+    fi
 }
 
 realm_show_status() {
@@ -1043,6 +1204,7 @@ show_menu() {
     echo -e "  ${BLUE}9.${NC} 删除 realm 转发"
     echo -e "  ${BLUE}10.${NC} realm 服务状态"
     echo -e "  ${BLUE}11.${NC} 卸载 realm"
+    echo -e "  ${BLUE}12.${NC} 修改 realm 监听 (IPv4/IPv6/双栈)"
     echo ""
     echo -e "  ${RED}0.${NC} 返回主菜单"
     echo ""
@@ -1055,7 +1217,7 @@ main() {
 
     while true; do
         show_menu
-        read -p "请选择 (0-11): " choice
+        read -p "请选择 (0-12): " choice
 
         case $choice in
             1)
@@ -1090,6 +1252,9 @@ main() {
                 ;;
             11)
                 realm_uninstall
+                ;;
+            12)
+                realm_change_stack || true
                 ;;
             0)
                 echo ""

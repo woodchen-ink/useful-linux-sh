@@ -267,8 +267,10 @@ sudo ./port_forward.sh
 **realm 转发：**
 - ➕ **添加** - 首次添加时自动安装 realm (musl 静态版) 与 `realm.service`, 可选 TCP 或 TCP+UDP
 - 🛰️ **PROXY protocol** - 可选 v1 / v2, 把访客 IP 传给目标; 只作用于 TCP, UDP 不携带访客 IP
+- 🌐 **IPv6 / 双栈监听** - 每条规则可选仅 IPv4 (`0.0.0.0`)、仅 IPv6 (`[::]`) 或双栈; 双栈拆成两个监听, IPv6 端设 `ipv6_only`, IPv4 访客在 PROXY 头里仍是原始 IPv4; 目标地址同样支持 IPv6
+- 🔁 **旧规则加 IPv6** - 菜单 12 可单条修改监听方式, 或输入 `a` 把全部仅 IPv4 的旧规则一次改为双栈
 - 📋 **列出 / 删除** - 按编号删除, 删到 0 条时自动停止服务
-- 🔙 **失败回滚** - 新规则导致 realm 启动失败时自动撤回该规则
+- 🔙 **失败回滚** - 新规则或监听修改导致 realm 启动失败时自动撤回
 - 🚧 **端口冲突检查** - 同一端口不能同时被 iptables 规则、realm 规则或其他程序占用
 
 **开启 PROXY protocol 前, 目标端必须先配置接收:**
@@ -282,7 +284,8 @@ sudo ./port_forward.sh
 - realm 规则记录：`/etc/uls/realm_forward.conf` (以此为准)
 - realm 配置：`/etc/realm/config.toml` (由规则记录生成, 手改会被覆盖)
 - realm 服务：`/etc/systemd/system/realm.service`, 日志 `journalctl -u realm`
-- UFW 启用时需放行 realm 监听端口 (realm 走 INPUT 链, 不走 FORWARD)
+- UFW 启用时需放行 realm 监听端口 (realm 走 INPUT 链, 不走 FORWARD); IPv6 监听还需 `/etc/default/ufw` 中 `IPV6=yes`
+- realm 规则格式新增第 7 段监听栈 (`v4`/`v6`/`dual`), 旧规则没有该段时按 `v4` 处理, 无需手动迁移
 
 #### 🔌 GOST代理管理工具
 一键安装、配置和管理GOST代理服务，支持HTTP/HTTPS和SOCKS5协议，使用systemd进行服务管理。

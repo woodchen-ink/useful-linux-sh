@@ -14,6 +14,12 @@ PRIMARY_DNS="8.8.8.8"
 SECONDARY_DNS="1.1.1.1"
 PRIMARY_DNS_V6="2001:4860:4860::8888"
 SECONDARY_DNS_V6="2606:4700:4700::1111"
+# systemd-resolved 的兜底 DNS (主 DNS 全部不可用时才启用), 选 Quad9 与主 DNS 错开厂商
+FALLBACK_DNS="9.9.9.9 149.112.112.112"
+FALLBACK_DNS_V6="2620:fe::fe"
+
+# systemd-resolved 配置文件路径
+RESOLVED_DNS_CONF="/etc/systemd/resolved.conf.d/dns.conf"
 
 # 是否支持IPv6
 HAS_IPV6=false
@@ -22,10 +28,10 @@ CONFIGURE_IPV6=false
 
 # DNSSEC 模式 (yes / allow-downgrade / no)
 # - yes: 严格校验,签名链不全的域名直接 SERVFAIL (典型踩坑:中转域名/CDN 多级 CNAME 经常签名链断)
-# - allow-downgrade: 校验有签名的域名,签名缺失/不完整时降级为不校验,生产推荐
-# - no: 完全关掉,把校验交给上游 DNS (1.1.1.1 / 8.8.8.8 都自带 DNSSEC)
-# 默认 allow-downgrade,兼顾安全与可用性
-DNSSEC_MODE="allow-downgrade"
+# - allow-downgrade: 校验有签名的域名,签名缺失时降级;但签名存在而链不完整时仍会 SERVFAIL
+# - no: 本机不校验,把校验交给上游 DNS (1.1.1.1 / 8.8.8.8 都自带 DNSSEC)
+# 默认 no: 上游已校验,本机再校验只会在中转/CDN 多级 CNAME 域名上制造解析失败
+DNSSEC_MODE="no"
 
 # 日志函数
 log_info() {
@@ -112,28 +118,104 @@ detect_ipv6() {
 }
 
 # 选择 DNSSEC 模式
-# 历史踩坑: 默认 yes 会让多级 CNAME 中转域名 (CDN / saas) 偶发 SERVFAIL,
-# 表现为 host 命令解析失败,但 dig +short 正常。allow-downgrade 是更稳的默认值。
+# 历史踩坑: yes / allow-downgrade 都会让多级 CNAME 中转域名 (CDN / saas) 偶发 SERVFAIL,
+# 表现为 host 命令解析失败,但 dig +short 正常。上游已校验,本机默认 no。
 choose_dnssec_mode() {
     log_step "选择 DNSSEC 校验模式..."
     echo ""
     echo -e "${YELLOW}DNSSEC 校验策略:${NC}"
-    echo "1) allow-downgrade  (推荐) 有签名的校验,签名缺失时降级,兼顾安全与可用性"
-    echo "2) yes              严格校验,中转/CDN 域名容易 SERVFAIL,适合纯内网场景"
-    echo "3) no               不校验,上游 DNS (1.1.1.1/8.8.8.8) 自带 DNSSEC,故障率最低"
+    echo "1) no               (推荐) 本机不校验,上游 DNS (1.1.1.1/8.8.8.8) 自带 DNSSEC,故障率最低"
+    echo "2) allow-downgrade  有签名的校验,签名缺失时降级;签名链不完整的中转/CDN 域名仍可能 SERVFAIL"
+    echo "3) yes              严格校验,中转/CDN 域名容易 SERVFAIL,适合纯内网场景"
     read -p "请选择 (1-3) [默认: 1]: " dnssec_choice
     dnssec_choice=${dnssec_choice:-1}
 
     case $dnssec_choice in
-        1) DNSSEC_MODE="allow-downgrade" ;;
-        2) DNSSEC_MODE="yes" ;;
-        3) DNSSEC_MODE="no" ;;
+        1) DNSSEC_MODE="no" ;;
+        2) DNSSEC_MODE="allow-downgrade" ;;
+        3) DNSSEC_MODE="yes" ;;
         *)
-            DNSSEC_MODE="allow-downgrade"
-            log_warn "无效选择,使用默认: allow-downgrade"
+            DNSSEC_MODE="no"
+            log_warn "无效选择,使用默认: no"
             ;;
     esac
     log_info "DNSSEC 模式: $DNSSEC_MODE"
+    if [ "$DNSSEC_MODE" != "no" ]; then
+        log_warn "DNSSEC=$DNSSEC_MODE 时,中转/CDN 多级 CNAME 域名可能解析失败 (SERVFAIL);出现后可在主菜单选「修复 DNSSEC」改回 no"
+    fi
+}
+
+# 备份 systemd-resolved 的 dns.conf (存在时), 备份名不以 .conf 结尾, 不会被 resolved 读入
+backup_resolved_conf() {
+    if [ -f "$RESOLVED_DNS_CONF" ]; then
+        local backup_file="${RESOLVED_DNS_CONF}.backup.$(date +%Y%m%d_%H%M%S)"
+        if cp -p "$RESOLVED_DNS_CONF" "$backup_file"; then
+            log_info "已备份 $RESOLVED_DNS_CONF -> $backup_file"
+        else
+            log_error "备份 $RESOLVED_DNS_CONF 失败"
+            return 1
+        fi
+    fi
+}
+
+# 读取现有 dns.conf 里的 DNSSEC 值 (无文件或未设置时输出空)
+current_dnssec_mode() {
+    [ -f "$RESOLVED_DNS_CONF" ] || return 0
+    sed -n 's/^[[:space:]]*DNSSEC[[:space:]]*=[[:space:]]*\([^[:space:]#]*\).*/\1/p' "$RESOLVED_DNS_CONF" | tail -1
+}
+
+# 修复 DNSSEC: 把现有 dns.conf 的 DNSSEC 改为 no, 备份后重启 systemd-resolved, 保留 chattr +i 锁定
+fix_dnssec() {
+    log_step "修复 DNSSEC 设置..."
+
+    if [ ! -f "$RESOLVED_DNS_CONF" ]; then
+        log_error "未找到 $RESOLVED_DNS_CONF,本机未通过 systemd-resolved 配置 DNS,无需修复"
+        return 1
+    fi
+
+    local current_mode
+    current_mode=$(current_dnssec_mode)
+    if [ "$current_mode" = "no" ]; then
+        log_info "当前 DNSSEC 已是 no,无需修改"
+        return 0
+    fi
+    log_info "当前 DNSSEC: ${current_mode:-未设置 (systemd-resolved 默认值)}"
+
+    # 记录原锁定状态, 改完按原状态恢复
+    local was_locked=false
+    if lsattr "$RESOLVED_DNS_CONF" 2>/dev/null | awk '{print $1}' | grep -q 'i'; then
+        was_locked=true
+    fi
+    chattr -i "$RESOLVED_DNS_CONF" 2>/dev/null || true
+
+    if ! backup_resolved_conf; then
+        [ "$was_locked" = "true" ] && chattr +i "$RESOLVED_DNS_CONF" 2>/dev/null
+        return 1
+    fi
+
+    if grep -q '^[[:space:]]*DNSSEC[[:space:]]*=' "$RESOLVED_DNS_CONF"; then
+        sed -i 's/^[[:space:]]*DNSSEC[[:space:]]*=.*/DNSSEC=no/' "$RESOLVED_DNS_CONF"
+    elif grep -q '^\[Resolve\]' "$RESOLVED_DNS_CONF"; then
+        sed -i '/^\[Resolve\]/a DNSSEC=no' "$RESOLVED_DNS_CONF"
+    else
+        printf '[Resolve]\nDNSSEC=no\n' >> "$RESOLVED_DNS_CONF"
+    fi
+
+    if [ "$was_locked" = "true" ]; then
+        chattr +i "$RESOLVED_DNS_CONF" 2>/dev/null || log_warn "无法重新锁定 $RESOLVED_DNS_CONF"
+    fi
+
+    if systemctl restart systemd-resolved; then
+        log_info "已重启 systemd-resolved"
+    else
+        log_error "重启 systemd-resolved 失败,请检查: systemctl status systemd-resolved"
+        return 1
+    fi
+
+    if command -v resolvectl >/dev/null 2>&1; then
+        resolvectl status 2>/dev/null | grep -i 'DNSSEC' | head -3
+    fi
+    log_info "DNSSEC 已改为 no"
 }
 
 # 备份原始配置
@@ -189,21 +271,24 @@ configure_dns_services() {
 
                 mkdir -p /etc/systemd/resolved.conf.d
 
-                # 解锁可能存在的配置文件锁定
-                if [ -f /etc/systemd/resolved.conf.d/dns.conf ]; then
-                    chattr -i /etc/systemd/resolved.conf.d/dns.conf 2>/dev/null || true
+                # 解锁可能存在的配置文件锁定, 覆盖前先备份
+                if [ -f "$RESOLVED_DNS_CONF" ]; then
+                    chattr -i "$RESOLVED_DNS_CONF" 2>/dev/null || true
+                    backup_resolved_conf || log_warn "dns.conf 备份失败,继续覆盖"
                 fi
 
                 # 构建DNS列表
                 local dns_list="$PRIMARY_DNS $SECONDARY_DNS"
+                local fallback_list="$FALLBACK_DNS"
                 if [ "$CONFIGURE_IPV6" = "true" ]; then
                     dns_list="$dns_list $PRIMARY_DNS_V6 $SECONDARY_DNS_V6"
+                    fallback_list="$fallback_list $FALLBACK_DNS_V6"
                 fi
 
-                cat > /etc/systemd/resolved.conf.d/dns.conf << RESOLV_EOF
+                cat > "$RESOLVED_DNS_CONF" << RESOLV_EOF
 [Resolve]
 DNS=$dns_list
-FallbackDNS=
+FallbackDNS=$fallback_list
 DNSSEC=$DNSSEC_MODE
 DNSOverTLS=opportunistic
 Cache=yes
@@ -628,14 +713,24 @@ show_main_menu() {
     echo -e "${YELLOW}请选择操作:${NC}"
     echo "1) 安装 / 重新配置 DNS    (会覆盖现有 DNS 配置并启用每分钟保护)"
     echo "2) 卸载 / 回退 DNS 配置   (停止保护服务,删除 dns.conf,恢复备份)"
+    echo "3) 修复 DNSSEC            (把现有 dns.conf 的 DNSSEC 改为 no,备份后重启 resolved,保留锁定)"
     echo "0) 退出"
+
+    local current_mode
+    current_mode=$(current_dnssec_mode)
+    if [ "$current_mode" = "yes" ] || [ "$current_mode" = "allow-downgrade" ]; then
+        echo ""
+        log_warn "检测到当前 DNSSEC=$current_mode,中转/CDN 域名可能解析失败,建议选 3 修复"
+    fi
+
     echo ""
-    read -p "请选择 (0-2) [默认: 1]: " action_choice
+    read -p "请选择 (0-3) [默认: 1]: " action_choice
     action_choice=${action_choice:-1}
 
     case $action_choice in
         1) do_install ;;
         2) uninstall ;;
+        3) fix_dnssec || exit 1 ;;
         0)
             log_info "已退出"
             exit 0

@@ -192,7 +192,7 @@ sudo ./security_monitor.sh
 ```bash
 wget -O setup_dns.sh https://i.czl.net/uls/scripts/network/setup_dns.sh
 chmod +x setup_dns.sh
-sudo ./setup_dns.sh           # 进入交互菜单(安装/卸载二选一)
+sudo ./setup_dns.sh           # 进入交互菜单(安装 / 卸载 / 修复 DNSSEC)
 sudo ./setup_dns.sh --install # 直接走安装路径,跳过菜单
 sudo ./setup_dns.sh --uninstall # 直接走卸载路径,跳过菜单
 ```
@@ -204,7 +204,9 @@ sudo ./setup_dns.sh --uninstall # 直接走卸载路径,跳过菜单
   - 选项2：仅配置IPv4 DNS
   - Google IPv6 DNS: 2001:4860:4860::8888
   - Cloudflare IPv6 DNS: 2606:4700:4700::1111
-- 🔐 **DNSSEC 模式可选**: 默认 `allow-downgrade`(签名缺失自动降级,兼顾安全与可用性)。原始默认 `yes` 在中转/CDN 多级 CNAME 场景下经常 SERVFAIL,可改成 `no` 完全交给上游 DNS 校验。
+- 🔐 **DNSSEC 模式可选**: 默认 `no`,本机不校验,交给自带 DNSSEC 的上游 (1.1.1.1 / 8.8.8.8)。`yes` 与 `allow-downgrade` 在中转/CDN 多级 CNAME 场景下可能 SERVFAIL,选它们时脚本会额外提示。
+- 🛟 **兜底 DNS**: systemd-resolved 模式写入 `FallbackDNS=9.9.9.9 149.112.112.112`(选 IPv6 时追加 `2620:fe::fe`),覆盖 `dns.conf` 前自动备份为 `dns.conf.backup.YYYYMMDD_HHMMSS`。
+- 🩹 **修复 DNSSEC**: 主菜单选 3,把已部署机器 `dns.conf` 里的 DNSSEC 改为 `no`,先备份、重启 systemd-resolved,并保留 `chattr +i` 锁定;检测到现有值为 `yes` / `allow-downgrade` 时菜单会提示。
 - 🔒 **多重保护**: chattr锁定 + systemd定时检查 + 自动恢复
 - 🔧 **智能适配**: 支持systemd-resolved和传统resolv.conf模式
 - ✅ **完整测试**: 根据配置测试IPv4和/或IPv6解析功能
